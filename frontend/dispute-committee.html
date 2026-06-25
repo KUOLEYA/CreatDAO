@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CreatDAO - 争议委员会端</title>
+  <link rel="stylesheet" href="common.css?v=2">
+  <script src="lib/ethers.min.js?v=2"></script>
+  <script src="lib/axios.min.js?v=2"></script>
+  <script src="common.js?v=2"></script>
+  <script src="config.js?v=4"></script>
+  <script src="contract.js?v=6"></script>
+  <script src="wallet.js?v=3"></script>
+  <style>
+    .wallet-area { display: flex; align-items: center; gap: 10px; }
+    .wallet-status { display: flex; align-items: center; gap: 8px; padding: 7px 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; font-size: 13px; }
+    .wallet-status .dot-indicator { width: 8px; height: 8px; border-radius: 50%; }
+    .wallet-status .dot-indicator.disconnected { background: #666; }
+    .wallet-status .dot-indicator.connected { background: #4caf50; box-shadow: 0 0 8px rgba(76,175,80,0.5); }
+    .wallet-status .addr { font-family: 'SF Mono', 'Fira Code', monospace; color: rgba(255,255,255,0.7); }
+    .vote-indicator { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 14px; font-size: 11px; font-weight: 600; }
+    .vote-indicator.auditor { background: rgba(33,150,243,0.12); color: #90caf9; border: 1px solid rgba(33,150,243,0.2); }
+    .vote-indicator.community { background: rgba(255,152,0,0.12); color: #ffcc80; border: 1px solid rgba(255,152,0,0.2); }
+    .vote-indicator.not-voted { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.35); border: 1px solid rgba(255,255,255,0.06); }
+    .case-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 20px; margin-bottom: 14px; transition: all 0.3s ease; }
+    .case-card:hover { border-color: rgba(0,188,212,0.2); box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+    .case-card .case-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .case-card .case-id { font-size: 16px; font-weight: 700; color: #00bcd4; }
+    .case-card .case-hash { font-family: 'SF Mono','Fira Code',monospace; font-size: 11px; color: rgba(255,255,255,0.35); background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 6px; margin: 8px 0; word-break: break-all; }
+    .case-card .vote-bar { display: flex; align-items: center; gap: 16px; margin-top: 12px; }
+    .case-card .vote-progress { flex: 1; height: 8px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
+    .case-card .vote-progress .bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+    .case-card .vote-progress .bar-fill.auditor { background: linear-gradient(90deg, #1976d2, #42a5f5); }
+    .case-card .vote-progress .bar-fill.community { background: linear-gradient(90deg, #e65100, #ff9800); }
+    .case-card .vote-count { font-size: 13px; color: rgba(255,255,255,0.5); white-space: nowrap; }
+    @media (max-width: 700px) {
+      .wallet-area { flex-wrap: wrap; }
+      .inp-num { width: 100%; }
+      .form-row { flex-direction: column; align-items: stretch; }
+      .form-row label { min-width: auto; }
+      .card { padding: 14px; }
+    }
+  </style>
+
+</head>
+<body>
+<div class="app-container">
+
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">⚖️</div>
+      <div class="title">
+        <h1>争议委员会端</h1>
+        <span>CreatDAO Dispute Committee Panel</span>
+      </div>
+    </div>
+    <div class="wallet-area">
+      <span class="wallet-status" id="walletStatus">
+        <span class="dot-indicator disconnected"></span> 未连接
+      </span>
+      <button class="btn btn-primary" id="connectBtn" onclick="connectWallet()">连接钱包</button>
+      <button class="btn btn-outline btn-sm" onclick="window.location.href='home.html'">返回主页面</button>
+    </div>
+  </header>
+
+  <div class="panel-header">
+    <p>争议委员会成员专属操作面板</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon orange">⚖️</div>
+      <div>
+        <div class="card-title">委员会投票</div>
+        <div class="card-desc">对争议提案进行投票，支持审计方或社区方</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>提案 ID</label>
+        <input id="committeeVoteProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+        <div class="radio-group">
+          <label><input type="radio" name="committeeVote" value="true" checked> 支持审计方</label>
+          <label><input type="radio" name="committeeVote" value="false"> 支持社区方</label>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="committeeVote()">投票</button>
+      </div>
+      <div id="committeeVoteResult" class="msg"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">📊</div>
+      <div>
+        <div class="card-title">查看投票结果</div>
+        <div class="card-desc">查询争议提案的委员会投票状态</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>提案 ID</label>
+        <input id="viewVoteProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+        <button class="btn btn-outline btn-sm" onclick="viewCommitteeVotes()">查询</button>
+      </div>
+      <pre id="voteDetails" class="code-block">点击查询按钮获取数据</pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon green">✓</div>
+      <div>
+        <div class="card-title">确认否决提案</div>
+        <div class="card-desc">对审计团队发起的否决提案进行确认投票</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>否决提案 ID</label>
+        <input id="vetoProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+        <button class="btn btn-primary btn-sm" onclick="confirmVeto()">确认否决</button>
+      </div>
+      <div id="vetoConfirmResult" class="msg"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon red">📋</div>
+      <div>
+        <div class="card-title">查看否决提案详情</div>
+        <div class="card-desc">查询否决提案的完整信息及确认列表</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>否决提案 ID</label>
+        <input id="viewVetoId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+        <button class="btn btn-outline btn-sm" onclick="viewVetoProposal()">查看</button>
+      </div>
+      <pre id="vetoDetails" class="code-block">点击查看按钮获取数据</pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">👥</div>
+      <div>
+        <div class="card-title">查看委员会成员</div>
+        <div class="card-desc">查看争议委员会所有成员地址及其质押与信誉信息</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <button class="btn btn-outline btn-sm" onclick="loadCommitteeMembers()" style="align-self:flex-start;">刷新成员列表</button>
+      <div id="committeeMembersList" style="display: flex; flex-direction: column; gap:12px;"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+
+  const auditDAO_ABI = [
+    "function committeeVote(uint256 proposalId, bool supportAuditor) external",
+    "function getCommitteeMembers() external view returns (address[] memory)",
+    "function getProposalSummary(uint256 proposalId) external view returns (tuple(uint256 id, bytes32 codeHash, bytes32 auditReportHash, bytes32 winningCommunityHash, bytes32 secondReviewHash, uint8 status, uint8 riskLevel, uint256 createdAt, uint256 disputeCreatedAt, bool arbitrationRequested, bool vetoRequested, bool vetoApproved))",
+    "function owner() external view returns (address)",
+    "function auditTeam() external view returns (address)",
+    "function isCommitteeMember(address member) external view returns (bool)"
+  ];
+
+  const multisig_ABI = [
+    "function confirmVeto(uint256 vetoProposalId) external",
+    "function getVetoProposal(uint256 vetoProposalId) external view returns (tuple(uint256 id, uint256 auditProposalId, address proposer, string evidence, uint256 confirmationCount, bool executed, bool failed, uint256 createdAt))",
+    "function getConfirmations(uint256 vetoProposalId) external view returns (address[] memory)"
+  ];
+
+
+
+  async function connectWallet() {
+    const btn = document.getElementById('connectBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 连接中...';
+    try {
+      var ok = await Wallet.connect();
+      if (ok) {
+        btn.textContent = '已连接';
+        await checkAccessPermission();
+      } else {
+        btn.disabled = false;
+        btn.textContent = '连接钱包';
+      }
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = '连接钱包';
+      console.error('Connect wallet failed:', e);
+    }
+  }
+
+  async function checkAccessPermission() {
+    if (!Wallet.isConnected()) return;
+
+    try {
+      let roles;
+      try {
+        const res = await fetch(CONFIG.API_BASE + '/contract/roles?address=' + encodeURIComponent(Wallet.getAddress()));
+        roles = await res.json();
+      } catch (e) {
+        console.error('获取合约角色失败:', e);
+        alert('❌ 无法获取合约角色信息，请稍后重试');
+        return;
+      }
+
+      if (roles.source === 'fallback') {
+        alert('❌ 无法连接合约网络，请稍后重试');
+        return;
+      }
+
+      const isOwner = roles.owner && roles.owner.toLowerCase() === Wallet.getAddress().toLowerCase();
+      if (isOwner) {
+        return;
+      }
+
+      const isAuditTeam = roles.audit_team && roles.audit_team.toLowerCase() === Wallet.getAddress().toLowerCase();
+      if (isAuditTeam) {
+        alert('❌ 审计团队无权访问争议委员会端！\n\n审计团队只能访问审计团队端，请返回用户端后点击"切换至审计团队"');
+        window.location.href = 'home.html';
+        return;
+      }
+
+      const isCommitteeMember = roles.is_committee === true;
+      if (!isCommitteeMember) {
+        alert('❌ 无权限访问争议委员会端！\n\n只有以下角色可以访问：\n• Owner\n• 争议委员会成员\n\n即将跳转到主页面...');
+        window.location.href = 'home.html';
+        return;
+      }
+    } catch (e) {
+      alert('获取权限信息失败: ' + e.message);
+    }
+  }
+
+  async function committeeVote() {
+    if (!Wallet.isConnected()) return alert("请先连接钱包");
+    const pid = document.getElementById("committeeVoteProposalId").value;
+    const checkedRadio = document.querySelector('input[name="committeeVote"]:checked');
+    if (!checkedRadio) {
+      const el = document.getElementById("committeeVoteResult");
+      el.className = 'msg error';
+      el.innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 请先选择投票选项（支持审计方 / 支持社区方）';
+      return;
+    }
+    const supportAuditor = checkedRadio.value === 'true';
+    try {
+      document.getElementById("committeeVoteResult").className = 'msg pending';
+      document.getElementById("committeeVoteResult").innerHTML = '正在投票...';
+      const tx = await Wallet.getContracts().auditDAO.committeeVote(pid, supportAuditor);
+      await tx.wait();
+      document.getElementById("committeeVoteResult").className = 'msg success';
+      document.getElementById("committeeVoteResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 投票已提交: ' + (supportAuditor ? '支持审计方' : '支持社区方');
+    } catch (e) {
+      const el = document.getElementById("committeeVoteResult");
+      let errorMsg = e.message || '';
+      if (e.data && e.data.message) {
+        errorMsg = e.data.message;
+      } else if (e.error && e.error.data && e.error.data.message) {
+        errorMsg = e.error.data.message;
+      }
+      const revertMatch = errorMsg.match(/reverted: (.+?)"/);
+      if (revertMatch) {
+        errorMsg = revertMatch[1];
+      }
+      if (e.code === 4001 || (e.message && e.message.toLowerCase().includes('user rejected'))) {
+        el.className = 'msg';
+        el.innerHTML = '已取消操作';
+      } else {
+        el.className = 'msg error';
+        el.innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 投票失败: ' + errorMsg;
+      }
+    }
+  }
+
+  async function viewCommitteeVotes() {
+    if (!Wallet.isConnected()) return alert("请先连接钱包");
+    const pid = document.getElementById("viewVoteProposalId").value;
+    try {
+      const p = await Wallet.getContracts().auditDAO.getProposalSummary(pid);
+      const sm = ['Submitted','TeamReview','CommunityReview','Discussion','FirstDispute','SecondReview','CommitteeRuling','Arbitration','VetoReview','Finalized'];
+
+      const members = await Wallet.getContracts().auditDAO.getCommitteeMembers();
+      const activeMembers = members.filter(function(m) { return m !== '0x' + '0'.repeat(40); });
+
+      const details = {
+        proposalId: pid,
+        status: sm[p.status] || p.status,
+        riskLevel: ['None','Low','Medium','High','Critical'][p.riskLevel] || p.riskLevel,
+        committeeMembers: activeMembers.length,
+        vetoRequested: p.vetoRequested,
+        vetoApproved: p.vetoApproved,
+        note: '投票计数不通过合约公开暴露。请通过委员会成员调用 committeeVote 提交投票。'
+      };
+      document.getElementById("voteDetails").innerText = JSON.stringify(details, null, 2);
+    } catch (e) {
+      document.getElementById("voteDetails").innerText = '失败: ' + e.message;
+    }
+  }
+
+  async function confirmVeto() {
+    if (!Wallet.isConnected()) return alert("请先连接钱包");
+    const vetoId = document.getElementById("vetoProposalId").value;
+    try {
+      document.getElementById("vetoConfirmResult").className = 'msg pending';
+      document.getElementById("vetoConfirmResult").innerHTML = '正在确认...';
+      const tx = await (new ethers.Contract(CONFIG.MULTISIG_ADDRESS, ['function confirmVeto(uint256 vetoProposalId) external'], Wallet.getSigner())).confirmVeto(vetoId);
+      await tx.wait();
+      document.getElementById("vetoConfirmResult").className = 'msg success';
+      document.getElementById("vetoConfirmResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 已确认否决提案 ' + vetoId;
+    } catch (e) { handleError(e, "vetoConfirmResult"); }
+  }
+
+  async function viewVetoProposal() {
+    if (!Wallet.isConnected()) return alert("请先连接钱包");
+    const vetoId = document.getElementById("viewVetoId").value;
+    try {
+      const v = await (new ethers.Contract(CONFIG.MULTISIG_ADDRESS, ['function getVetoProposal(uint256 vetoProposalId) external view returns (tuple(uint256 id, uint256 auditProposalId, address proposer, string evidence, uint256 confirmationCount, bool executed, bool failed, uint256 createdAt))', 'function getConfirmations(uint256 vetoProposalId) external view returns (address[] memory)'], Wallet.getSigner())).getVetoProposal(vetoId);
+      const confirmations = await (new ethers.Contract(CONFIG.MULTISIG_ADDRESS, ['function getVetoProposal(uint256 vetoProposalId) external view returns (tuple(uint256 id, uint256 auditProposalId, address proposer, string evidence, uint256 confirmationCount, bool executed, bool failed, uint256 createdAt))', 'function getConfirmations(uint256 vetoProposalId) external view returns (address[] memory)'], Wallet.getSigner())).getConfirmations(vetoId);
+      const details = {
+        id: v.id.toString(),
+        auditProposalId: v.auditProposalId.toString(),
+        proposer: v.proposer,
+        evidence: v.evidence,
+        confirmationCount: v.confirmationCount.toString(),
+        executed: v.executed,
+        failed: v.failed,
+        createdAt: v.createdAt.toString(),
+        confirmationsList: confirmations
+      };
+      document.getElementById("vetoDetails").innerText = JSON.stringify(details, null, 2);
+    } catch (e) {
+      document.getElementById("vetoDetails").innerText = '失败: ' + e.message;
+    }
+  }
+
+  async function loadCommitteeMembers() {
+    const container = document.getElementById('committeeMembersList');
+    container.innerHTML = '<div class="msg" style="margin:0;">加载中...</div>';
+
+    try {
+      const res = await fetch(CONFIG.API_BASE + '/committee/members');
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || '请求失败');
+      }
+      const members = await res.json();
+
+      if (!members || members.length === 0) {
+        container.innerHTML = '<div style="color:rgba(255,255,255,0.5); padding:20px; text-align:center;">暂无委员会成员</div>';
+        return;
+      }
+
+      let html = '';
+      for (let i = 0; i < members.length; i++) {
+        const m = members[i];
+        const balance = (parseInt(m.balance) / 1e18).toFixed(2);
+        const rewards = (parseInt(m.rewards) / 1e18).toFixed(2);
+        const points = m.contributionPoints;
+        const score = m.reputationScore;
+
+        html += `
+          <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+              <div>
+                <div style="font-size:15px; font-weight:600; color:#fff;">委员会成员 #${i + 1}</div>
+                <div style="font-family:'SF Mono','Fira Code',monospace; font-size:12px; color:#60a5fa; margin-top:4px; word-break:break-all;">${m.address}</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:22px; font-weight:700; color:#fbbf24;">${score}</div>
+                <div style="font-size:11px; color:rgba(255,255,255,0.5);">信誉分</div>
+              </div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;">
+              <div style="background:rgba(255,255,255,0.04); padding:8px; border-radius:8px;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.5);">质押余额</div>
+                <div style="font-size:15px; font-weight:600; color:#4ade80;">${balance} CEAT</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.04); padding:8px; border-radius:8px;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.5);">待领奖励</div>
+                <div style="font-size:15px; font-weight:600; color:#60a5fa;">${rewards} CEAT</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.04); padding:8px; border-radius:8px;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.5);">贡献积分</div>
+                <div style="font-size:15px; font-weight:600; color:#c084fc;">${points}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      container.innerHTML = html;
+    } catch (e) {
+      console.error("加载委员会成员失败:", e);
+      container.innerHTML = '<div class="msg error" style="margin:0;"><span style="flex-shrink:0;">&#10060;</span> 加载失败: ' + e.message + '</div>';
+    }
+  }
+
+  Wallet.registerEvents();
+  Wallet.autoConnect();
+</script>
+</body>
+</html>

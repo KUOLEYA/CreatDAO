@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CreatDAO - 审计服务定价</title>
+  <link rel="stylesheet" href="common.css?v=2">
+  <script src="common.js?v=2"></script>
+  <script src="lib/ethers.min.js?v=2"></script>
+  <script src="lib/axios.min.js?v=2"></script>
+  <script src="config.js?v=4"></script>
+  <script src="contract.js?v=6"></script>
+  <script src="wallet.js?v=3"></script>
+  <style>
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+    .pricing-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 20px;
+      padding: 32px 24px;
+      text-align: center;
+      transition: all 0.3s ease;
+      position: relative;
+      backdrop-filter: blur(10px);
+    }
+    .pricing-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+    }
+    .pricing-card.featured {
+      border: 2px solid rgba(255, 213, 79, 0.4);
+      box-shadow: 0 0 30px rgba(255, 213, 79, 0.1);
+    }
+    .pricing-card.featured::before {
+      content: '🔥 主推';
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, #ff9800, #f44336);
+      color: #fff;
+      padding: 4px 16px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .pricing-tier-icon { font-size: 40px; margin-bottom: 12px; }
+    .pricing-tier-name { font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+    .pricing-tier-desc { font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 20px; line-height: 1.5; }
+    .pricing-tier-price { margin-bottom: 20px; }
+    .pricing-tier-price .symbol { font-size: 20px; color: rgba(255,255,255,0.5); vertical-align: top; }
+    .pricing-tier-price .amount { font-size: 42px; font-weight: 800; color: #fff; line-height: 1; }
+    .pricing-tier-price .period { font-size: 13px; color: rgba(255,255,255,0.4); display: block; margin-top: 4px; }
+    .pricing-tier-price .range { font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 4px; }
+    .pricing-features { text-align: left; margin-bottom: 24px; min-height: 200px; }
+    .pricing-features li {
+      padding: 8px 0; font-size: 13px; color: rgba(255,255,255,0.65);
+      list-style: none; display: flex; align-items: flex-start; gap: 8px; line-height: 1.4;
+    }
+    .pricing-features li::before { content: '✓'; color: #43a047; font-weight: 700; flex-shrink: 0; }
+    .pricing-positioning { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 16px; font-style: italic; }
+
+    .calculator-section {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 20px;
+      padding: 32px;
+      margin-bottom: 32px;
+      backdrop-filter: blur(10px);
+    }
+    .calculator-section h2 { font-size: 20px; color: #fff; margin-bottom: 24px; display: flex; align-items: center; gap: 10px; }
+    .calc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 800px) { .calc-grid { grid-template-columns: 1fr; } }
+    .calc-col label { display: block; font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 6px; font-weight: 600; }
+    .select-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 16px; }
+    .select-btn {
+      padding: 10px 14px; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
+      background: rgba(255,255,255,0.04); color: #b0b0b0; font-size: 13px;
+      font-weight: 600; cursor: pointer; transition: all 0.2s; text-align: center;
+    }
+    .select-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .select-btn.active { background: rgba(102, 126, 234, 0.2); border-color: #667eea; color: #fff; }
+    .switch-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .switch-label { font-size: 13px; color: rgba(255,255,255,0.7); }
+    .switch-hint { font-size: 11px; color: rgba(255,255,255,0.35); display: block; }
+    .toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: rgba(255,255,255,0.15); border-radius: 24px; transition: 0.3s; }
+    .toggle-slider::before { content: ''; position: absolute; width: 20px; height: 20px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: 0.3s; }
+    input:checked + .toggle-slider { background: linear-gradient(135deg, #667eea, #764ba2); }
+    input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+    .result-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(102, 126, 234, 0.2); border-radius: 16px; padding: 24px; }
+    .result-card h3 { font-size: 16px; color: #fff; margin-bottom: 20px; }
+    .result-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; color: rgba(255,255,255,0.6); border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .result-row.total { font-size: 16px; font-weight: 700; color: #fff; border-bottom: none; padding-top: 12px; margin-top: 4px; }
+    .result-row.total .val {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      font-size: 22px;
+    }
+    .result-row .discount { color: #43a047; }
+    .result-row .val { font-weight: 600; color: rgba(255,255,255,0.85); }
+    .formula-box { background: rgba(255,255,255,0.03); border-radius: 10px; padding: 14px; margin-top: 16px; font-size: 12px; color: rgba(255,255,255,0.45); line-height: 1.6; }
+
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 40px; }
+    .info-card {
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px; padding: 24px; backdrop-filter: blur(10px);
+    }
+    .info-card h3 { font-size: 16px; color: #fff; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    .discount-table { width: 100%; border-collapse: collapse; }
+    .discount-table th, .discount-table td { padding: 8px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .discount-table th { color: rgba(255,255,255,0.4); font-weight: 500; }
+    .discount-table td { color: rgba(255,255,255,0.75); }
+    .highlight-green { color: #43a047; }
+
+    .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-left: 8px; }
+    .badge-hot { background: rgba(239, 83, 80, 0.2); color: #ef5350; border: 1px solid rgba(239, 83, 80, 0.3); }
+    .btn-lg { padding: 14px 32px; font-size: 15px; border-radius: 12px; }
+  </style>
+
+</head>
+<body>
+  <div class="app-container">
+    <div class="header">
+      <div class="header-left">
+        <div class="logo">C</div>
+        <div class="title">
+          <h1>CreatDAO 审计服务定价</h1>
+          <span>基础费 + 赏金池抽成 + 争议费 · 透明定价</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline" onclick="window.location.href='index.html'">🏠 主页</button>
+        <button class="btn btn-outline" onclick="window.location.href='ai-review.html'">🔍 提交审计</button>
+        <button class="btn btn-outline" id="btnConnect" onclick="connectWallet()">🔌 连接钱包</button>
+      </div>
+    </div>
+
+    <div class="panel-header">
+      <h1>💰 审计服务收费结构</h1>
+      <p>采用 <strong>"基础费 + 赏金池抽成 + 争议费"</strong> 收费模型。以等值法币计价，使用 CEAT 平台代币支付可享折扣。</p>
+    </div>
+
+    <div class="pricing-grid" id="tierCards">
+    </div>
+
+    <div class="calculator-section">
+      <h2>🧮 在线定价计算器</h2>
+      <div class="calc-grid">
+        <div class="calc-col">
+          <label>服务层级</label>
+          <div class="select-group" id="tierSelect">
+            <button class="select-btn active" data-value="standard">⭐ 标准版</button>
+            <button class="select-btn" data-value="deep">🛡️ 深度版</button>
+          </div>
+
+          <label>合约复杂度</label>
+          <div class="select-group" id="complexitySelect">
+            <button class="select-btn" data-value="simple">简单 ×0.7</button>
+            <button class="select-btn active" data-value="moderate">中等 ×1.0</button>
+            <button class="select-btn" data-value="complex">复杂 ×1.5</button>
+            <button class="select-btn" data-value="highly_complex">高度复杂 ×2.0</button>
+          </div>
+
+          <label>资产池规模</label>
+          <div class="select-group" id="assetPoolSelect">
+            <button class="select-btn" data-value="micro">微型</button>
+            <button class="select-btn active" data-value="small">小型</button>
+            <button class="select-btn" data-value="medium">中型</button>
+            <button class="select-btn" data-value="large">大型</button>
+            <button class="select-btn" data-value="extra_large">超大型</button>
+          </div>
+
+          <div class="switch-row">
+            <div>
+              <div class="switch-label">附加赏金池</div>
+              <div class="switch-hint">吸引更多顶尖白帽子参与</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="toggleBounty" onchange="updateCalc()">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div id="bountyInput" style="display:none; margin-bottom:12px;">
+            <input type="number" id="bountyAmount" placeholder="赏金池金额 (USD)" min="0" step="100" value="5000"
+              style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:#fff;font-size:13px;"
+              oninput="updateCalc()">
+          </div>
+
+          <div class="switch-row">
+            <div>
+              <div class="switch-label">启用争议仲裁</div>
+              <div class="switch-hint">含仲裁押金 + 委员会启动费</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="toggleDispute" onchange="updateCalc()">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="switch-row">
+            <div>
+              <div class="switch-label">💎 使用 CEAT 代币支付</div>
+              <div class="switch-hint">享 15% 统一折扣</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="toggleToken" onchange="updateCalc()">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="calc-col">
+          <div class="result-card" id="resultCard">
+            <h3>📋 费用明细</h3>
+            <div id="resultLoading" style="color:rgba(255,255,255,0.3)">选择参数后自动计算...</div>
+            <div id="resultContent" style="display:none"></div>
+          </div>
+          <div style="margin-top:16px;">
+            <input type="text" id="orderProjectName" placeholder="项目名称（必填）" style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:#fff;font-size:13px;margin-bottom:10px;">
+            <input type="text" id="orderWalletAddr" placeholder="钱包地址（可选，默认已连接钱包）" style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:#fff;font-size:13px;margin-bottom:10px;">
+            <button class="btn btn-success btn-lg" onclick="createOrder()" style="width:100%;">📦 创建审计订单</button>
+            <div id="orderResult" class="msg" style="margin-top:10px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-grid">
+      <div class="info-card">
+        <h3>🏦 质押费用减免</h3>
+        <table class="discount-table">
+          <thead><tr><th>等级</th><th>质押数量</th><th>费用减免</th><th>优先排队</th></tr></thead>
+          <tbody id="stakeTableBody">
+            <tr><td>基础</td><td>0 CEAT</td><td>0%</td><td>—</td></tr>
+            <tr><td>白银</td><td>≥1,000 CEAT</td><td>5%</td><td>—</td></tr>
+            <tr><td>黄金</td><td>≥5,000 CEAT</td><td>10%</td><td>✓</td></tr>
+            <tr><td>铂金</td><td>≥25,000 CEAT</td><td>15%</td><td>✓</td></tr>
+            <tr><td>钻石</td><td>≥100,000 CEAT</td><td>20%</td><td>✓</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="info-card">
+        <h3>⚖️ 赏金池 & 争议费用</h3>
+        <div style="font-size:13px;color:rgba(255,255,255,0.65);line-height:1.8;">
+          <p><strong style="color:#fff;">赏金抽成：</strong>平台收取赏金池总额的 <span style="color:#667eea;">10%-20%</span></p>
+          <p><strong style="color:#fff;">仲裁押金：</strong>$2,000 - $5,000（胜诉退还，败诉没收）</p>
+          <p><strong style="color:#fff;">委员会启动费：</strong>$500 - $1,500（双方均摊）</p>
+        </div>
+        <div style="margin-top:16px;padding:14px;background:rgba(102,126,234,0.08);border-radius:10px;font-size:12px;color:rgba(255,255,255,0.5);line-height:1.6;">
+          <p><strong style="color:#9fa8da;">💡 为什么要额外注资赏金池？</strong></p>
+          <p>更高赏金能吸引更多顶尖白帽子和安全专家参与，形成"优质项目 → 高赏金 → 更安全"的正向飞轮。</p>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <h3>🎁 代币经济激励</h3>
+        <div style="font-size:13px;color:rgba(255,255,255,0.65);line-height:1.8;">
+          <p><strong style="color:#667eea;">代币支付折扣：</strong>使用 CEAT 支付享 <span style="color:#43a047;">15% 折扣</span></p>
+          <p><strong style="color:#667eea;">质押减免：</strong>质押越多，手续费越低，最高减免 <span style="color:#43a047;">20%</span></p>
+          <p><strong style="color:#667eea;">审计即挖矿：</strong>支付审计费可获 <span style="color:#43a047;">5% 平台代币返还</span></p>
+        </div>
+        <div style="margin-top:16px;padding:14px;background:rgba(76,175,80,0.08);border-radius:10px;font-size:12px;color:rgba(255,255,255,0.5);line-height:1.6;">
+          <p><strong style="color:#43a047;">📐 收费公式：</strong></p>
+          <p>单次审计费用 = 基础审计费(按档位 × 复杂度系数 × 资产池系数) + (可选赏金池 × 抽成%) + (触发时的争议费)</p>
+          <p style="margin-top:8px;">使用原生代币支付，享统一折扣。抵扣叠加生效。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = CONFIG.API_BASE;
+
+    let walletAddress = null;
+    let currentTiers = [];
+    let lastPricingData = null;
+
+    async function loadTiers() {
+      try {
+        const res = await axios.get(API_BASE + '/pricing/tiers');
+        currentTiers = res.data;
+        renderTierCards(currentTiers);
+        updateCalc();
+      } catch (e) {
+        console.error('Failed to load tiers:', e);
+        renderFallbackTiers();
+      }
+    }
+
+    function renderTierCards(tiers) {
+      const container = document.getElementById('tierCards');
+      container.innerHTML = tiers.map((t, i) => `
+        <div class="pricing-card ${i === 1 ? 'featured' : ''}">
+          <div class="pricing-tier-icon">${t.icon}</div>
+          <div class="pricing-tier-name">${t.name}</div>
+          <div class="pricing-tier-desc">${t.description}</div>
+          <div class="pricing-tier-price">
+            <span class="symbol">$</span>
+            <span class="amount">${t.default_price.toLocaleString()}</span>
+            <span class="period">起 / 次</span>
+            <span class="range">价格区间: ${t.price_range}</span>
+          </div>
+          <ul class="pricing-features">
+            ${t.includes.map(f => `<li>${f}</li>`).join('')}
+          </ul>
+          <button class="btn btn-primary btn-lg ${i === 1 ? 'btn-success' : ''}" onclick="selectTier('${t.tier}')">
+            ${i === 1 ? '🚀 选择标准版' : '选择此方案'}
+          </button>
+          <div class="pricing-positioning">${t.positioning}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderFallbackTiers() {
+      const fallback = [
+        { tier: 'standard', icon: '⭐', name: '标准版', description: 'AI 筛查 + 社区去中心化审核 + 最终报告',
+          default_price: 12499, price_range: '$4,999 - $24,999',
+          includes: ['AI 深度筛查 + 社区审核','多维度安全分析报告','漏洞风险等级评定','修复建议与最佳实践','争议仲裁机制覆盖','5-10 工作日交付'],
+          positioning: '主推爆款。对标 Sher10k 等众包审计，价格有竞争力' },
+        { tier: 'deep', icon: '🛡️', name: '深度版', description: '标准版 + 审计团队深度介入 + 高频争议委员会支持',
+          default_price: 45000, price_range: '$25,000 - $80,000+',
+          includes: ['标准版全部服务','资深审计团队深度介入','人工逐行代码审查','高频争议委员会专属通道','持续安全监控','优先响应 + 加急处理'],
+          positioning: '面向大型 DeFi、RWA、公链基础设施，价格为传统巨头 1/2~1/5' }
+      ];
+      currentTiers = fallback;
+      renderTierCards(fallback);
+    }
+
+    function selectTier(tier) {
+      const btns = document.querySelectorAll('#tierSelect .select-btn');
+      btns.forEach(b => b.classList.toggle('active', b.dataset.value === tier));
+      document.getElementById('tierCards').scrollIntoView({ behavior: 'smooth' });
+      updateCalc();
+    }
+
+    function getActive(groupId) {
+      const el = document.querySelector(`#${groupId} .select-btn.active`);
+      return el ? el.dataset.value : '';
+    }
+
+    async function updateCalc() {
+      const tier = getActive('tierSelect');
+      const complexity = getActive('complexitySelect');
+      const assetPool = getActive('assetPoolSelect');
+      const needBounty = document.getElementById('toggleBounty').checked;
+      const bountyAmount = parseFloat(document.getElementById('bountyAmount').value) || 0;
+      const hasDispute = document.getElementById('toggleDispute').checked;
+      const payWithToken = document.getElementById('toggleToken').checked;
+
+      document.getElementById('bountyInput').style.display = needBounty ? 'block' : 'none';
+
+      if (!tier) return;
+
+      try {
+        const res = await axios.post(API_BASE + '/pricing/calculate', {
+          tier, complexity, asset_pool_size: assetPool,
+          need_bounty: needBounty, bounty_amount: bountyAmount,
+          has_dispute: hasDispute, pay_with_token: payWithToken
+        });
+        renderResult(res.data);
+      } catch (e) {
+        console.error('Calculate error:', e);
+        document.getElementById('resultLoading').textContent = '计算失败，请检查后端服务';
+      }
+    }
+
+    function renderResult(data) {
+      lastPricingData = data;
+      document.getElementById('resultLoading').style.display = 'none';
+      const content = document.getElementById('resultContent');
+      content.style.display = 'block';
+
+      const total = data.total_after_discount || data.final_payable;
+      const discounts = [];
+      if (data.token_discount_amount > 0) discounts.push(`代币折扣: -$${data.token_discount_amount.toLocaleString()}`);
+      if (data.staking_discount_amount > 0) discounts.push(`质押减免: -$${data.staking_discount_amount.toLocaleString()}`);
+
+      content.innerHTML = `
+        <div class="result-row"><span>服务层级</span><span class="val">${data.tier_name}</span></div>
+        <div class="result-row"><span>基础定价</span><span class="val">$${data.base_price.toLocaleString()}</span></div>
+        <div class="result-row"><span>复杂度系数</span><span class="val">${data.complexity_name} (×${data.complexity_multiplier})</span></div>
+        <div class="result-row"><span>资产池系数</span><span class="val">${data.asset_pool_name} (×${data.asset_pool_multiplier})</span></div>
+        <div class="result-row" style="border-bottom:1px solid rgba(255,255,255,0.1)"><span>调整后基础费</span><span class="val">$${data.adjusted_base_fee.toLocaleString()}</span></div>
+        ${data.bounty_commission_amount > 0 ? `
+        <div class="result-row"><span>赏金池总额</span><span class="val">$${data.bounty_fee.toLocaleString()}</span></div>
+        <div class="result-row"><span>赏金平台抽成 (${data.bounty_commission_pct}%)</span><span class="val">$${data.bounty_commission_amount.toLocaleString()}</span></div>
+        ` : ''}
+        ${data.arbitration_deposit > 0 ? `
+        <div class="result-row"><span>仲裁押金</span><span class="val">$${data.arbitration_deposit.toLocaleString()}</span></div>
+        <div class="result-row"><span>委员会启动费</span><span class="val">$${data.committee_fee.toLocaleString()}</span></div>
+        ` : ''}
+        <div class="result-row"><span>折扣前合计</span><span class="val">$${data.total_before_discount.toLocaleString()}</span></div>
+        ${discounts.map(d => `<div class="result-row discount"><span>${d.split(':')[0]}</span><span>${d.split(':')[1]}</span></div>`).join('')}
+        <div class="result-row total"><span>🎯 最终应付</span><span class="val">$${total.toLocaleString()}</span></div>
+        ${data.audit_earn_return > 0 ? `<div style="font-size:12px;color:#43a047;margin-top:8px;">📈 审计即挖矿：支付后可获 $${data.audit_earn_return.toLocaleString()} 等值 CEAT 代币返还 (5%)</div>` : ''}
+        <div class="formula-box">${data.breakdown_text?.formula || ''}<br>${data.breakdown_text?.token_discount_desc || ''}${data.breakdown_text?.staking_discount_desc ? '<br>' + data.breakdown_text.staking_discount_desc : ''}</div>
+      `;
+    }
+
+    document.querySelectorAll('.select-group').forEach(group => {
+      group.addEventListener('click', (e) => {
+        if (e.target.classList.contains('select-btn')) {
+          group.querySelectorAll('.select-btn').forEach(b => b.classList.remove('active'));
+          e.target.classList.add('active');
+          updateCalc();
+        }
+      });
+    });
+
+    async function connectWallet() {
+      const el = document.getElementById('btnConnect');
+      el.disabled = true;
+      const originalText = el.textContent;
+      el.textContent = '⏳ 连接中...';
+      try {
+        const ok = await Wallet.connect();
+        if (ok) {
+          walletAddress = Wallet.getAddress();
+          el.textContent = walletAddress.slice(0, 6) + '...' + walletAddress.slice(-4);
+          el.classList.add('btn-primary');
+        } else {
+          el.textContent = originalText;
+        }
+      } catch (e) {
+        el.textContent = originalText;
+        console.error('Connect wallet failed:', e);
+      } finally {
+        el.disabled = false;
+      }
+    }
+
+    async function createOrder() {
+      const projectName = document.getElementById('orderProjectName').value.trim();
+      if (!projectName) {
+        document.getElementById('orderResult').className = 'msg error';
+        document.getElementById('orderResult').innerHTML = '请输入项目名称';
+        return;
+      }
+      if (!lastPricingData) {
+        document.getElementById('orderResult').className = 'msg error';
+        document.getElementById('orderResult').innerHTML = '请先选择参数计算价格';
+        return;
+      }
+
+      const orderWallet = document.getElementById('orderWalletAddr').value.trim() || walletAddress || '';
+
+      document.getElementById('orderResult').className = 'msg pending';
+      document.getElementById('orderResult').innerHTML = '⏳ 创建订单中...';
+
+      try {
+        const tier = getActive('tierSelect');
+        const complexity = getActive('complexitySelect');
+        const assetPool = getActive('assetPoolSelect');
+        const needBounty = document.getElementById('toggleBounty').checked;
+        const bountyAmount = parseFloat(document.getElementById('bountyAmount').value) || 0;
+        const hasDispute = document.getElementById('toggleDispute').checked;
+        const payWithToken = document.getElementById('toggleToken').checked;
+
+        const res = await axios.post(API_BASE + '/pricing/orders', {
+          tier, complexity, asset_pool_size: assetPool,
+          need_bounty: needBounty, bounty_amount: bountyAmount,
+          has_dispute: hasDispute, pay_with_token: payWithToken,
+          project_name: projectName,
+          wallet_address: orderWallet
+        });
+
+        document.getElementById('orderResult').className = 'msg success';
+        document.getElementById('orderResult').innerHTML = '订单创建成功！订单号: ' + res.data.order_id + '<br>应付金额: $' + res.data.final_payable.toLocaleString();
+      } catch (e) {
+        document.getElementById('orderResult').className = 'msg error';
+        document.getElementById('orderResult').innerHTML = '创建失败: ' + (e.response?.data?.detail || e.message);
+      }
+    }
+
+    loadTiers();
+
+    Wallet.registerEvents();
+    Wallet.autoConnect();
+
+  </script>
+</body>
+</html>

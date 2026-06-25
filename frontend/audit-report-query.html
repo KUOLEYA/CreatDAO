@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CreatDAO - 查询审计报告</title>
+  <link rel="stylesheet" href="common.css?v=2">
+  <script src="lib/axios.min.js?v=2"></script>
+  <script src="common.js?v=2"></script>
+  <script src="config.js?v=4"></script>
+  <style>
+    .query-result-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 20px; margin-top: 14px; transition: all 0.3s ease; }
+    .query-result-card:hover { border-color: rgba(102,126,234,0.2); }
+    .query-result-card .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .query-result-card .result-id { font-size: 18px; font-weight: 700; color: #667eea; }
+    .query-result-card .field-label { font-size: 11px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .query-result-card .field-value { font-size: 14px; color: rgba(255,255,255,0.8); margin-bottom: 12px; word-break: break-all; }
+    .query-result-card .field-value.hash { font-family: 'SF Mono','Fira Code',monospace; font-size: 12px; background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: 8px; color: rgba(255,255,255,0.6); }
+    .search-box { display: flex; gap: 8px; align-items: center; }
+    .report-card {
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 12px;
+    }
+    .report-card .report-title {
+      font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 12px;
+      padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .report-card .report-section {
+      margin-bottom: 12px;
+    }
+    .report-card .report-section:last-child {
+      margin-bottom: 0;
+    }
+    .report-card .section-label {
+      font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 4px;
+    }
+    .report-card .section-value {
+      font-size: 14px; color: #e0e0e0; line-height: 1.5;
+    }
+    .risk-level {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .risk-level.high {
+      background: rgba(229,57,53,0.2);
+      color: #ef9a9a;
+    }
+    .risk-level.medium {
+      background: rgba(255,152,0,0.2);
+      color: #ffcc80;
+    }
+    .risk-level.low {
+      background: rgba(76,175,80,0.2);
+      color: #81c784;
+    }
+    @media (max-width: 700px) {
+      .inp-hash { width: 100%; }
+      .form-row { flex-direction: column; align-items: stretch; }
+      .form-row label { min-width: auto; }
+      .card { padding: 14px; }
+    }
+  </style>
+
+</head>
+<body>
+<div class="app-container">
+
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">🔍</div>
+      <div class="title">
+        <h1>CreatDAO</h1>
+        <span>审计报告查询</span>
+      </div>
+    </div>
+    <button class="btn btn-outline" onclick="window.location.href='home.html'">返回主页面</button>
+  </header>
+
+  <div class="panel-header">
+    <h1>查询详细审计报告</h1>
+    <p>选择查询方并输入方案哈希，获取完整的审计报告内容</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">📋</div>
+      <div>
+        <div class="card-title">查询审计报告</div>
+        <div class="card-desc">选择要查询的方案方，输入对应的哈希值进行查询</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>查询方</label>
+        <div class="radio-group">
+          <label><input type="radio" name="queryParty" value="audit" checked> 审计团队方案</label>
+          <label><input type="radio" name="queryParty" value="community"> 社区方案</label>
+          <label><input type="radio" name="queryParty" value="project"> AI审核报告</label>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>方案哈希</label>
+        <input id="reportHash" class="inp inp-hash" type="text" placeholder="0x..." size="66">
+        <button class="btn btn-primary btn-sm" onclick="queryReport()">查询报告</button>
+      </div>
+      <div id="queryResult" class="msg"></div>
+    </div>
+  </div>
+
+  <div id="reportContainer" style="display: none;">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon green">📄</div>
+        <div>
+          <div class="card-title">审计报告详情</div>
+          <div class="card-desc">方案哈希对应的完整审计报告内容</div>
+        </div>
+      </div>
+      <div class="card-body" id="reportContent"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const BACKEND_API = CONFIG.API_BASE;
+
+  function $(id) { return document.getElementById(id); }
+
+  function showPending(id, text) {
+    const el = $(id);
+    el.className = 'msg pending';
+    el.innerHTML = '<span class="spinner"></span> ' + text;
+  }
+
+  function showSuccess(id, text) {
+    const el = $(id);
+    el.className = 'msg success';
+    el.innerHTML = '<span style="flex-shrink:0;">&#10004;</span> ' + text;
+  }
+
+  function showError(id, text) {
+    const el = $(id);
+    el.className = 'msg error';
+    el.innerHTML = '<span style="flex-shrink:0;">&#10060;</span> ' + text;
+  }
+
+  function ensureHexPrefix(h) { 
+    return h.startsWith('0x') ? h : '0x' + h; 
+  }
+
+  function validateHex(hash) {
+    const clean = hash.replace('0x', '');
+    if (clean.length !== 64) { 
+      alert('方案哈希必须是 32 字节 (64 位 Hex)，当前 ' + clean.length + ' 位'); 
+      return false; 
+    }
+    if (!/^[0-9a-fA-F]+$/.test(clean)) { 
+      alert('方案哈希包含无效 Hex 字符'); 
+      return false; 
+    }
+    return true;
+  }
+
+  async function queryReport() {
+    const hash = $('reportHash').value.trim();
+    if (!hash) {
+      alert('请输入方案哈希');
+      return;
+    }
+    
+    const ch = ensureHexPrefix(hash);
+    if (!validateHex(ch)) {
+      return;
+    }
+
+    const party = document.querySelector('input[name="queryParty"]:checked').value;
+    
+    showPending('queryResult', '正在查询审计报告...');
+    $('reportContainer').style.display = 'none';
+
+    try {
+      let response;
+      if (party === 'ai') {
+        response = await axios.get(BACKEND_API + '/audit/reports/' + encodeURIComponent(ch));
+      } else {
+        try {
+          response = await axios.get(BACKEND_API + '/reports/' + encodeURIComponent(ch) + '?party=community');
+        } catch (e) {
+          response = await axios.get(BACKEND_API + '/reports/' + encodeURIComponent(ch) + '?party=team');
+        }
+      }
+      
+      showSuccess('queryResult', '查询成功！');
+      
+      displayReport(response.data, party);
+      
+    } catch (e) {
+      const errorMsg = e.response?.data?.detail || e.message || '查询失败';
+      showError('queryResult', errorMsg);
+      console.error('查询失败:', e);
+    }
+  }
+
+  function displayReport(data, party) {
+    const container = $('reportContainer');
+    const content = $('reportContent');
+    const report = data.report_content || {};
+
+    let html = '<div class="report-card">';
+
+    if (party === 'project') {
+      html += displayProjectReport(data, report);
+    } else {
+      html += displayAiReport(data, report, party);
+    }
+
+    html += '</div>';
+    content.innerHTML = html;
+    container.style.display = 'block';
+  }
+
+  function formatRelatedProposals(proposalIds) {
+    if (!proposalIds || proposalIds.length === 0) {
+      return '<span style="color:rgba(255,255,255,0.35);">未关联任何提案</span>';
+    }
+    return proposalIds.map(pid =>
+      `<span style="display:inline-block;background:rgba(102,126,234,0.2);padding:4px 10px;border-radius:6px;margin:2px 4px;font-family:monospace;font-size:13px;">提案 #${pid}</span>`
+    ).join('');
+  }
+
+  function displayProjectReport(data, report) {
+    const overallConclusion = report.final_verdict?.overall_conclusion || '未知';
+    const findingsCount = report.findings?.length || 0;
+    const highCount = report.findings?.filter(f => f.severity === '高危').length || 0;
+    const mediumCount = report.findings?.filter(f => f.severity === '中危').length || 0;
+    const lowCount = report.findings?.filter(f => f.severity === '低危').length || 0;
+
+    return `
+      <div class="report-title">📋 AI审核报告</div>
+
+      <div class="report-section">
+        <div class="section-label">关联提案</div>
+        <div class="section-value">${formatRelatedProposals(data.related_proposals)}</div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">代码哈希</div>
+        <div class="section-value" style="font-family:monospace;">${data.code_hash || '未知'}</div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">项目名称</div>
+        <div class="section-value">${data.project_name || '未填写'}</div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">合约地址</div>
+        <div class="section-value" style="font-family:monospace;">${data.contract_address || '未填写'}</div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">业务逻辑简述</div>
+        <div class="section-value">${data.business_logic || '未填写'}</div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">审计范围</div>
+        <div class="section-value">${data.audit_scope || '未填写'}</div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">已知风险自述</div>
+        <div class="section-value">${data.known_risks || '未填写'}</div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">联系方式</div>
+        <div class="section-value">${data.contact || '未填写'}</div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">AI 审计结论</div>
+        <div class="section-value">
+          <span class="risk-level ${overallConclusion === 'PASS' ? 'low' : 'high'}">
+            ${overallConclusion}
+          </span>
+        </div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">问题统计</div>
+        <div class="section-value">
+          共 ${findingsCount} 个问题：
+          <span style="color:#ef9a9a;">高危 ${highCount}</span> / 
+          <span style="color:#ffcc80;">中危 ${mediumCount}</span> / 
+          <span style="color:#81c784;">低危 ${lowCount}</span>
+        </div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">提交时间</div>
+        <div class="section-value">${data.created_at ? new Date(data.created_at).toLocaleString() : '未知'}</div>
+      </div>
+    `;
+  }
+
+  function displayAiReport(data, report, party) {
+    const partyLabel = party === 'audit' ? '审计团队' : '社区用户';
+    const overallConclusion = report.final_verdict?.overall_conclusion || '未知';
+    const findings = report.findings || [];
+    const reportHash = report.final_verdict?.report_hash || data.code_hash || '未知';
+
+    let findingsHtml = '';
+    if (findings.length === 0) {
+      findingsHtml = '<p style="color:#81c784;">✅ 未发现安全问题</p>';
+    } else {
+      findings.forEach((f, idx) => {
+        const sevClass = f.severity === '高危' ? 'high' : (f.severity === '中危' ? 'medium' : 'low');
+        findingsHtml += `
+          <div class="report-section" style="border-left:3px solid ${sevClass === 'high' ? '#ef9a9a' : (sevClass === 'medium' ? '#ffcc80' : '#81c784')}; padding-left:12px; margin-bottom:10px;">
+            <div class="section-label">问题 #${idx + 1} <span class="risk-level ${sevClass}">${f.severity || '未知'}</span></div>
+            <div class="section-value"><strong>类型：</strong>${f.vuln_type || '未知'}</div>
+            <div class="section-value"><strong>位置：</strong>${f.location || '未知'}</div>
+            <div class="section-value"><strong>描述：</strong>${f.description || '无'}</div>
+            <div class="section-value"><strong>结论：</strong>${f.conclusion || '无'}</div>
+          </div>
+        `;
+      });
+    }
+
+    return `
+      <div class="report-title">🔍 ${partyLabel} 审计报告</div>
+
+      <div class="report-section">
+        <div class="section-label">关联提案</div>
+        <div class="section-value">${formatRelatedProposals(data.related_proposals)}</div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">代码哈希</div>
+        <div class="section-value" style="font-family:monospace;">${data.code_hash || '未知'}</div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">报告哈希</div>
+        <div class="section-value" style="font-family:monospace;">${reportHash}</div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">提交方</div>
+        <div class="section-value">${partyLabel}</div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">项目名称</div>
+        <div class="section-value">${data.project_name || '未知'}</div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">审计结论</div>
+        <div class="section-value">
+          <span class="risk-level ${overallConclusion === 'PASS' ? 'low' : 'high'}">
+            ${overallConclusion === 'PASS' ? '✅ 通过' : '❌ 拦截'}
+          </span>
+          ${report.final_verdict?.pass_timestamp ? `<span style="margin-left:8px;font-size:12px;color:rgba(255,255,255,0.4);">${new Date(report.final_verdict.pass_timestamp).toLocaleString()}</span>` : ''}
+        </div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">审计引擎</div>
+        <div class="section-value">${report.execution_summary?.ai_engine || '未知'} / ${report.execution_summary?.tools || '未知'}</div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">发现问题 (${findings.length})</div>
+        <div class="section-value">
+          ${findingsHtml}
+        </div>
+      </div>
+
+      <div class="report-section">
+        <div class="section-label">提交时间</div>
+        <div class="section-value">${data.created_at ? new Date(data.created_at).toLocaleString() : '未知'}</div>
+      </div>
+    `;
+  }
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const hashParam = urlParams.get('hash');
+  const partyParam = urlParams.get('party');
+  
+  if (hashParam) {
+    $('reportHash').value = hashParam;
+  }
+  
+  if (partyParam && (partyParam === 'audit' || partyParam === 'community' || partyParam === 'project')) {
+    document.querySelector(`input[name="queryParty"][value="${partyParam}"]`).checked = true;
+  }
+</script>
+</body>
+</html>

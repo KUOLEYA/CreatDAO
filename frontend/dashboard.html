@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CreatDAO - 审计 DAO 操作面板 v2.6</title>
+  <link rel="stylesheet" href="common.css?v=2">
+  <script src="lib/ethers.min.js?v=2"></script>
+  <script src="lib/axios.min.js?v=2"></script>
+  <script src="common.js?v=2"></script>
+  <script src="config.js?v=4"></script>
+  <script src="contract.js?v=6"></script>
+  <script src="wallet.js?v=3"></script>
+  <style>
+.status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.status-badge.submitted { background: rgba(33,150,243,0.12); color: #90caf9; border: 1px solid rgba(33,150,243,0.2); }
+.status-badge.teamreview { background: rgba(156,39,176,0.12); color: #ce93d8; border: 1px solid rgba(156,39,176,0.2); }
+.status-badge.communityreview { background: rgba(255,152,0,0.12); color: #ffcc80; border: 1px solid rgba(255,152,0,0.2); }
+.status-badge.finalized { background: rgba(76,175,80,0.12); color: #81c784; border: 1px solid rgba(76,175,80,0.2); }
+.status-badge.dispute { background: rgba(229,57,53,0.12); color: #ef9a9a; border: 1px solid rgba(229,57,53,0.2); }
+.status-badge.ruling { background: rgba(0,188,212,0.12); color: #80deea; border: 1px solid rgba(0,188,212,0.2); }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.stat-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 18px; text-align: center; transition: all 0.3s ease; }
+.stat-card:hover { border-color: rgba(102,126,234,0.25); transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0,0,0,0.2); }
+.stat-card .stat-num { font-size: 32px; font-weight: 700; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.stat-card .stat-lbl { font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+.proposal-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; margin-bottom: 8px; transition: all 0.25s ease; }
+.proposal-row:hover { background: rgba(255,255,255,0.05); border-color: rgba(102,126,234,0.2); transform: translateX(3px); }
+.proposal-row .proposal-id { font-weight: 700; color: #667eea; font-size: 14px; min-width: 60px; }
+.proposal-row .proposal-hash { font-family: 'SF Mono','Fira Code',monospace; font-size: 12px; color: rgba(255,255,255,0.5); }
+.empty-state { text-align: center; padding: 48px 20px; color: rgba(255,255,255,0.3); }
+.empty-state .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+.empty-state p { font-size: 14px; }
+.tab-bar { display: flex; gap: 4px; background: rgba(255,255,255,0.03); border-radius: 12px; padding: 4px; margin-bottom: 16px; }
+.tab-btn { padding: 8px 18px; border: none; border-radius: 10px; font-size: 13px; cursor: pointer; background: transparent; color: rgba(255,255,255,0.5); transition: all 0.25s ease; }
+.tab-btn.active { background: rgba(102,126,234,0.2); color: #fff; }
+.tab-btn:hover:not(.active) { color: rgba(255,255,255,0.8); }
+.risk-selector { display: flex; gap: 10px; }
+.risk-option { padding: 10px 20px; border: 2px solid transparent; border-radius: 10px; cursor: pointer; user-select: none; transition: all 0.2s; font-size: 13px; font-weight: 600; opacity: 0.55; }
+.risk-option:hover { transform: translateY(-2px); opacity: 0.8; }
+.risk-option.selected { opacity: 1; box-shadow: 0 0 0 2px rgba(255,255,255,0.5), 0 4px 16px rgba(0,0,0,0.35); transform: scale(1.04); }
+.risk-option.critical { background: rgba(229,57,53,0.15); border-color: #ef5350; color: #ef9a9a; }
+.risk-option.high { background: rgba(229,57,53,0.12); border-color: #e53935; color: #ef9a9a; }
+.risk-option.medium { background: rgba(255,152,0,0.12); border-color: #ff9800; color: #ffcc80; }
+.risk-option.low { background: rgba(76,175,80,0.12); border-color: #4caf50; color: #81c784; }
+.risk-option.info { background: rgba(33,150,243,0.12); border-color: #2196f3; color: #90caf9; }
+.finding-item { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+.finding-item .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.finding-item .item-number { font-size: 14px; font-weight: 700; color: #667eea; }
+.finding-item .item-actions { display: flex; gap: 8px; }
+.network-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.network-pill.sepolia { background: rgba(255, 152, 0, 0.15); color: #ffb74d; border: 1px solid rgba(255, 152, 0, 0.25); }
+.network-pill .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.network-pill.sepolia .dot { background: #ffb74d; box-shadow: 0 0 6px rgba(255, 152, 0, 0.5); }
+.btn-warning { background: linear-gradient(135deg, #f57c00, #e65100); color: #fff; }
+.btn-warning:hover { box-shadow: 0 4px 16px rgba(245, 124, 0, 0.4); transform: translateY(-1px); }
+.btn-secondary { background: linear-gradient(135deg, #00bcd4, #00838f); color: #fff; }
+.btn-secondary:hover { box-shadow: 0 4px 16px rgba(0, 188, 212, 0.4); transform: translateY(-1px); }
+.inp-addr { width: 400px; max-width: 100%; }
+.copy-btn { cursor: pointer; color: rgba(255,255,255,0.3); font-size: 12px; padding: 2px 6px; border-radius: 4px; transition: 0.2s; background: transparent; border: 1px solid transparent; }
+.copy-btn:hover { color: rgba(255,255,255,0.6); border-color: rgba(255,255,255,0.1); }
+.wallet-status .dot-indicator.warning { background: #ff9800; box-shadow: 0 0 8px rgba(255,152,0,0.5); }
+.wallet-status .tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+.wallet-status .tag.owner { background: rgba(255, 152, 0, 0.2); color: #ffb74d; }
+.report-preview { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 24px; white-space: pre-wrap; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: rgba(255,255,255,0.8); max-height: 400px; overflow-y: auto; }
+.btn-group { display: flex; gap: 12px; flex-wrap: wrap; }
+.inp-textarea { min-height: 120px; resize: vertical; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 11px 14px; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; font-size: 14px; background: rgba(0,0,0,0.28); color: #e8e8e8; transition: all 0.2s ease; outline: none; }
+.inp-textarea:focus { border-color: rgba(102,126,234,0.5); box-shadow: 0 0 0 3px rgba(102,126,234,0.12); background: rgba(0,0,0,0.32); }
+.inp-textarea::placeholder { color: rgba(255,255,255,0.25); }
+.inp-textarea.large { min-height: 200px; }
+.form-row.full-width { flex-direction: column; align-items: stretch; }
+.form-row.full-width label { min-width: auto; margin-bottom: 8px; }
+@media (max-width: 700px) {
+  body { padding: 12px; }
+  .header { padding: 16px; flex-direction: column; align-items: stretch; }
+  .wallet-area { flex-wrap: wrap; }
+  .wallet-status { flex: 1; }
+  .inp-addr, .inp-hash { width: 100%; }
+  .form-row { flex-direction: column; align-items: stretch; }
+  .form-row label { min-width: auto; }
+  .card { padding: 14px; }
+}
+  </style>
+</head>
+<body>
+<div class="app-container">
+
+  <!-- ========== HEADER ========== -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">C</div>
+      <div class="title">
+        <h1>CreatDAO</h1>
+        <span>审计 DAO 统一操作面板</span>
+      </div>
+    </div>
+    <div class="wallet-area">
+      <span class="network-pill sepolia">
+        <span class="dot"></span> Sepolia
+      </span>
+      <div class="wallet-status" id="walletStatus">
+        <span class="dot-indicator disconnected"></span>
+        <span style="color:rgba(255,255,255,0.4);">未连接</span>
+      </div>
+      <button class="btn btn-primary" onclick="connectWallet()" id="connectBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/><path d="M12 12 21 3"/></svg>
+        连接钱包
+      </button>
+    </div>
+  </header>
+
+  <!-- ========== 返回主页 ========== -->
+  <div style="display: flex; gap: 12px; margin-bottom: 24px; justify-content: center; flex-wrap: wrap;">
+    <button class="btn btn-outline" onclick="window.location.href='home.html'">
+      ← 返回主页
+    </button>
+  </div>
+
+  <!-- ========== PANEL 1: COMMUNITY ========== -->
+  <div id="panel-community" class="panel active">
+    <div class="panel-header">
+      <h1>社区用户端</h1>
+      <p>质押 CEAT 代币后即可提交审计并参与社区投票</p>
+    </div>
+
+    <!-- Staking -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon green">&#9829;</div>
+        <div>
+          <div class="card-title">质押</div>
+          <div class="card-desc">授权并质押 CEAT 代币以参与社区治理</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="balanceInfo" class="msg info">连接钱包后点击"获取余额"查看 CEAT 余额</div>
+        <div class="form-row">
+          <label>数量</label>
+          <input id="stakeAmount" class="inp inp-sm inp-num" type="text" placeholder="CEAT 数量" value="100">
+          <button class="btn btn-outline btn-sm" onclick="loadUserBalance()">获取余额</button>
+          <button class="btn btn-success btn-sm" onclick="approveAndStake()">授权并质押</button>
+        </div>
+        <div class="form-row">
+          <span>已质押: <strong id="stakedBalance">0</strong> CEAT</span>
+        </div>
+        <div id="stakeResult" class="msg"></div>
+      </div>
+    </div>
+
+    <!-- Unstake -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon red">&#8634;</div>
+        <div>
+          <div class="card-title">解除质押</div>
+          <div class="card-desc">提取已质押的 CEAT 代币</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-row">
+          <label>数量</label>
+          <input id="unstakeAmount" class="inp inp-sm inp-num" type="text" placeholder="CEAT 数量" value="100">
+          <button class="btn btn-danger btn-sm" onclick="unstakeTokens()">解除质押</button>
+        </div>
+        <div id="unstakeResult" class="msg"></div>
+      </div>
+    </div>
+
+    <!-- Buy CEAT -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon green">&#x24;</div>
+        <div>
+          <div class="card-title">购买CEAT</div>
+          <div class="card-desc">1 ETH = 100 CEAT</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-row">
+          <label>ETH 数量</label>
+          <input id="ethAmount" class="inp inp-sm" type="number" value="0.01" step="0.001" placeholder="0.01" min="0">
+          <button class="btn btn-success btn-sm" onclick="buyCEAT()">购买CEAT</button>
+        </div>
+        <div class="form-row">
+          <span>将获得: <strong id="estimatedCEAT">1.0000</strong> CEAT</span>
+        </div>
+        <div id="buyResult" class="msg"></div>
+      </div>
+    </div>
+
+    <!-- Proposal Info -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon purple">&#9776;</div>
+        <div>
+          <div class="card-title">查看提案信息</div>
+          <div class="card-desc">查询链上提案详情及后端的补充数据</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-row">
+          <label>提案 ID</label>
+          <input id="proposalId" class="inp inp-sm inp-num" type="number" value="0" placeholder="ID" min="0">
+          <button class="btn btn-outline btn-sm" onclick="getProposalInfo()">查询链上</button>
+          <button class="btn btn-outline btn-sm" onclick="getProposalFullInfo()">完整信息</button>
+        </div>
+        <pre id="proposalInfo" class="code-block">点击查询按钮查看结果</pre>
+      </div>
+    </div>
+
+    <!-- Query Submitted Proposals -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon purple">&#128209;</div>
+        <div>
+          <div class="card-title">已提交方案</div>
+          <div class="card-desc">查看指定提案下所有社区已提交的方案及投票数</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-row">
+          <label>提案 ID</label>
+          <input id="queryProposalId" class="inp inp-sm inp-num" type="number" value="0" placeholder="ID" min="0">
+          <button class="btn btn-primary btn-sm" onclick="queryCommunityProposals()">查询已提交方案</button>
+        </div>
+        <div id="communityProposalsList" style="margin-top:10px;"></div>
+      </div>
+    </div>
+
+    <!-- Vote -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon cyan">&#10003;</div>
+        <div>
+          <div class="card-title">投票</div>
+          <div class="card-desc">支持给多个提案投票，输入提案ID+哈希即可</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="voteRows">
+          <div class="vote-row form-row">
+            <label>提案 ID</label>
+            <input class="inp inp-sm inp-num vote-pid" type="number" placeholder="ID" value="0" min="0">
+            <label style="min-width:auto;">方案哈希</label>
+            <input class="inp inp-hash vote-hash" type="text" placeholder="0x..." size="66">
+            <label>数量(CEAT)</label>
+            <input class="inp inp-sm inp-num vote-amount" type="number" placeholder="0=全部" value="0" min="0" style="width:80px;">
+          </div>
+        </div>
+        <div class="form-row">
+          <button class="btn btn-outline btn-sm" onclick="addVoteRow()" style="align-self:flex-start;">+ 添加提案</button>
+          <button class="btn btn-primary btn-sm" onclick="vote()">一键投票</button>
+        </div>
+        <div class="form-row">
+          <span>当前可投票数: <strong id="availableVotes">0</strong> 票</span>
+        </div>
+        <div id="voteResult" class="msg"></div>
+      </div>
+    </div>
+
+    <!-- Community Task Claiming -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon orange">🎯</div>
+        <div>
+          <div class="card-title">领取提案并开始审核</div>
+          <div class="card-desc">质押至少600 CEAT可领取提案，领取后可提交审计方案</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <button class="btn btn-outline btn-sm" onclick="loadAvailableTasks()" style="align-self:flex-start; margin-bottom:10px;">刷新可领取任务列表</button>
+        <div id="availableTasksList" style="display: flex; flex-direction: column; gap:12px;"></div>
+      </div>
+    </div>
+
+    <!-- Audit Teams List -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon cyan">&#128100;</div>
+        <div>
+          <div class="card-title">审计团队</div>
+          <div class="card-desc">查看所有活跃审计团队的信息和准确率</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <button class="btn btn-outline btn-sm" onclick="loadAuditTeamsUser()" style="align-self:flex-start; margin-bottom:10px;">刷新团队列表</button>
+        <div id="auditTeamsListUser" style="display: flex; flex-direction: column; gap:12px;"></div>
+      </div>
+    </div>
+
+    <!-- Committee Members -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon purple">👥</div>
+        <div>
+          <div class="card-title">争议委员会成员</div>
+          <div class="card-desc">查看争议委员会成员地址及其质押与信誉信息</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <button class="btn btn-outline btn-sm" onclick="loadCommitteeMembers()" style="align-self:flex-start; margin-bottom:10px;">刷新成员列表</button>
+        <div id="committeeMembersList" style="display: flex; flex-direction: column; gap:12px;"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const BACKEND_API = CONFIG.API_BASE;
+  const PROPOSAL_STATUS = CONFIG.PROPOSAL_STATUS;
+
+  function _A() { return Wallet.getContracts().auditDAO; }
+  function _C() { return Wallet.getContracts().ceatToken; }
+  function _T() { return Wallet.getContracts().teamManager; }
+  function _S() { return Wallet.getSigner(); }
+  function _U() { return Wallet.getAddress(); }
+
+  async function goToAudit() {
+    if (!_U()) {
+      alert('请先连接钱包');
+      return;
+    }
+    try {
+      const res = await fetch(BACKEND_API + '/contract/roles');
+      const roles = await res.json();
+      const isOwner = roles.owner && roles.owner.toLowerCase() === _U().toLowerCase();
+      const isAuditTeam = roles.audit_team && roles.audit_team.toLowerCase() === _U().toLowerCase();
+      
+      if (!isOwner && !isAuditTeam) {
+        alert('❌ 无权限访问审计团队端！\n\n只有以下角色可以访问：\n• Owner: ' + (roles.owner || '未知') + '\n• 审计团队: ' + (roles.audit_team || '未知'));
+        return;
+      }
+      
+      window.location.href = 'audit-team.html';
+    } catch (e) {
+      alert('获取权限信息失败: ' + e.message);
+    }
+  }
+
+  async function goToAdmin() {
+    if (!_U()) {
+      alert('请先连接钱包');
+      return;
+    }
+    try {
+      const res = await fetch(BACKEND_API + '/contract/roles?address=' + encodeURIComponent(_U()));
+      const roles = await res.json();
+      const isOwner = roles.owner && roles.owner.toLowerCase() === _U().toLowerCase();
+      
+      if (isOwner) {
+        window.location.href = 'admin.html';
+        return;
+      }
+      
+      const isAuditTeam = roles.audit_team && roles.audit_team.toLowerCase() === _U().toLowerCase();
+      
+      if (isAuditTeam) {
+        alert('❌ 审计团队无权访问管理端！\n\n审计团队只能访问审计团队端，请返回用户端后点击"跳转审计团队端"');
+        return;
+      }
+      
+      const isCommitteeMember = roles.is_committee === true;
+      if (!isCommitteeMember) {
+        alert('❌ 无权限访问管理端！\n\n只有以下角色可以访问：\n• Owner: ' + (roles.owner || '未知') + '\n• 委员会成员');
+        return;
+      }
+      
+      window.location.href = 'admin.html';
+    } catch (e) {
+      alert('获取权限信息失败: ' + e.message);
+    }
+  }
+
+  async function goToCommittee() {
+    if (!_U()) {
+      alert('请先连接钱包');
+      return;
+    }
+    try {
+      const res = await fetch(BACKEND_API + '/contract/roles?address=' + encodeURIComponent(_U()));
+      const roles = await res.json();
+      const isOwner = roles.owner && roles.owner.toLowerCase() === _U().toLowerCase();
+      const isAuditTeam = roles.audit_team && roles.audit_team.toLowerCase() === _U().toLowerCase();
+      
+      if (isAuditTeam && !isOwner) {
+        alert('❌ 审计团队无权访问争议委员会端！\n\n审计团队只能访问审计团队端，请点击"跳转审计团队端"');
+        return;
+      }
+      
+      const isCommitteeMember = roles.is_committee === true;
+      if (!isOwner && !isCommitteeMember) {
+        alert('❌ 无权限访问争议委员会端！\n\n只有以下角色可以访问：\n• Owner\n• 争议委员会成员');
+        return;
+      }
+      
+      window.location.href = 'dispute-committee.html';
+    } catch (e) {
+      alert('获取权限信息失败: ' + e.message);
+    }
+  }
+
+  function goToReportQuery() {
+    window.location.href = 'audit-report-query.html';
+  }
+
+  function goToAIPreliminary() {
+    window.location.href = 'ai-review.html';
+  }
+
+  async function isUserCommitteeMember() {
+    try {
+      const members = await _A().getCommitteeMembers();
+      for (let i = 0; i < members.length; i++) {
+        if (members[i] && members[i] !== '0x' + '0'.repeat(40) && members[i].toLowerCase() === _U().toLowerCase()) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  async function connectWallet() {
+    const btn = document.getElementById('connectBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 连接中...';
+    try {
+      await Wallet.connect();
+      btn.textContent = '已连接';
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = '连接钱包';
+      alert('连接钱包失败: ' + e.message);
+    }
+  }
+
+  async function loadUserBalance() {
+    if (!_U()) return alert('请先连接钱包');
+    showPending('balanceInfo', '正在查询余额...');
+    try {
+      const bal = await _C().balanceOf(_U());
+      const alw = await _C().allowance(_U(), CONFIG.AUDIT_DAO_ADDRESS);
+      const sym = await _C().symbol();
+      const stakerInfo = await _A().getStakerInfo(_U());
+      const stakedBalance = parseFloat(ethers.utils.formatEther(stakerInfo[0])).toFixed(4);
+      const votes = Math.floor(parseFloat(stakedBalance) / 100);
+      document.getElementById('stakedBalance').textContent = stakedBalance;
+      document.getElementById('availableVotes').textContent = votes;
+      showSuccess('balanceInfo', 'CEAT 余额: <strong>' + parseFloat(ethers.utils.formatEther(bal)).toFixed(4) + '</strong> ' + sym + ' | 授权额度: <strong>' + parseFloat(ethers.utils.formatEther(alw)).toFixed(4) + '</strong>');
+    } catch (e) {
+      showContractError('balanceInfo', e);
+    }
+  }
+
+  async function approveAndStake() {
+    if (!_S()) return alert('请先连接钱包');
+    const val = $('stakeAmount').value.trim();
+    if (!val || isNaN(val) || Number(val) <= 0) return alert('请输入有效的质押数量');
+    const amount = ethers.utils.parseEther(val);
+
+    const stakeResultEl = $('stakeResult');
+    stakeResultEl.className = 'msg';
+    stakeResultEl.innerHTML = '';
+
+    try {
+      let sym;
+      try { sym = await _C().symbol(); } catch { sym = 'CEAT'; }
+
+      let currentAllowance;
+      try {
+        currentAllowance = await _C().allowance(_U(), CONFIG.AUDIT_DAO_ADDRESS);
+      } catch (err) {
+        showError('stakeResult', '查询授权额度失败: ' + (err.reason || err.message || err));
+        return;
+      }
+
+      if (currentAllowance.lt(amount)) {
+        showPending('stakeResult', '步骤 1/2: 正在授权 CEAT 代币...');
+        try {
+          const tx1 = await _C().approve(CONFIG.AUDIT_DAO_ADDRESS, amount, { gasLimit: 300000 });
+          await tx1.wait();
+        } catch (err) {
+          if (err.code === 4001 || (err.message && err.message.toLowerCase().includes('user rejected'))) {
+            showError('stakeResult', '&#128184; 授权已取消');
+          } else {
+            showError('stakeResult', '授权失败: ' + (err.reason || err.message || String(err)));
+          }
+          return;
+        }
+      }
+
+      showPending('stakeResult', '步骤 2/2: 正在质押 CEAT...');
+      try {
+        const tx2 = await _A().stake(amount, { gasLimit: 500000 });
+        await tx2.wait();
+        const stakerInfo = await _A().getStakerInfo(_U());
+        const stakedBalance = parseFloat(ethers.utils.formatEther(stakerInfo[0])).toFixed(4);
+        const votes = Math.floor(parseFloat(stakedBalance) / 100);
+        document.getElementById('stakedBalance').textContent = stakedBalance;
+        document.getElementById('availableVotes').textContent = votes;
+        showSuccess('stakeResult', '质押成功! 数量: <strong>' + val + '</strong> ' + sym + ' | 当前已质押: <strong>' + stakedBalance + '</strong> CEAT | 可投票票数: <strong>' + votes + '</strong> 票 (每100 CEAT = 1票)');
+        $('stakeAmount').value = '';
+      } catch (err) {
+        const errMsg = err.reason || err.message || String(err);
+        if (err.code === 4001 || errMsg.toLowerCase().includes('user rejected') || errMsg.toLowerCase().includes('cancelled')) {
+          showError('stakeResult', '&#128184; 质押已取消');
+        } else if (errMsg.includes('execution reverted')) {
+          if (errMsg.includes('Transfer failed') || errMsg.includes('transferFrom')) {
+            showError('stakeResult', '&#10060; 转账失败，请确认: 1) 您的 CEAT 余额充足; 2) 已完成上方授权');
+          } else if (errMsg.includes('balance')) {
+            showError('stakeResult', '&#10060; CEAT 余额不足，最低需质押 500 CEAT');
+          } else {
+            showError('stakeResult', '&#10060; 合约拒绝: ' + errMsg.slice(0, 160));
+          }
+        } else {
+          showError('stakeResult', '&#10060; 质押失败: ' + errMsg.slice(0, 200));
+        }
+        console.error('质押失败详情:', err);
+      }
+    } catch (err) {
+      showError('stakeResult', '&#10060; ' + (err.reason || err.message || String(err)));
+      console.error('质押流程异常:', err);
+    }
+  }
+
+  async function unstakeTokens() {
+    if (!_S()) return alert('请先连接钱包');
+    const val = $('unstakeAmount').value.trim();
+    if (!val || isNaN(val) || Number(val) <= 0) return alert('请输入有效的解除质押数量');
+
+    const unstakeResultEl = $('unstakeResult');
+    unstakeResultEl.className = 'msg';
+    unstakeResultEl.innerHTML = '';
+
+    try {
+      const amount = ethers.utils.parseEther(val);
+
+      showPending('unstakeResult', '正在解除质押...');
+      const tx = await _A().unstake(amount, { gasLimit: 500000 });
+      await tx.wait();
+
+      const stakerInfo = await _A().getStakerInfo(_U());
+      const stakedBalance = parseFloat(ethers.utils.formatEther(stakerInfo[0])).toFixed(4);
+      const votes = Math.floor(parseFloat(stakedBalance) / 100);
+      document.getElementById('stakedBalance').textContent = stakedBalance;
+      document.getElementById('availableVotes').textContent = votes;
+
+      showSuccess('unstakeResult', '解除质押成功! 提取数量: <strong>' + val + '</strong> CEAT | 剩余质押: <strong>' + stakedBalance + '</strong> CEAT | 可投票票数: <strong>' + votes + '</strong> 票');
+      $('unstakeAmount').value = '';
+    } catch (e) {
+      showContractError('unstakeResult', e);
+    }
+  }
+
+  async function buyCEAT() {
+    if (!_S()) return alert('请先连接钱包');
+    const ethAmount = $('ethAmount').value;
+    if (!ethAmount || ethAmount <= 0) return alert('请输入有效的ETH数量');
+    
+    try {
+      showPending('buyResult', '正在购买CEAT...');
+      const tx = await _C().buyCEAT({ 
+        value: ethers.utils.parseEther(ethAmount),
+        gasLimit: 200000 
+      });
+      await tx.wait();
+      showSuccess('buyResult', '购买成功! 获得 <strong>' + (parseFloat(ethAmount) * 100).toFixed(2) + '</strong> CEAT');
+      
+      await loadUserBalance();
+    } catch (e) { 
+      showContractError('buyResult', e); 
+      console.error('购买失败详情:', e);
+    }
+  }
+
+  // 实时计算将获得的CEAT数量
+  document.getElementById('ethAmount').addEventListener('input', function() {
+    const ethAmount = parseFloat(this.value) || 0;
+    const ceatAmount = (ethAmount * 100).toFixed(4);
+    document.getElementById('estimatedCEAT').textContent = ceatAmount;
+  });
+
+  async function getProposalInfo() {
+    if (!_A()) return alert('请先连接钱包');
+    const pid = $('proposalId').value;
+    try {
+      const p = await _A().getProposalSummary(pid);
+      $('proposalInfo').innerText = JSON.stringify({
+        proposalId: p.id.toString(),
+        codeHash: p.codeHash,
+        auditReportHash: p.auditReportHash,
+        winningCommunityHash: p.winningCommunityHash,
+        secondReviewHash: p.secondReviewHash,
+        status: PROPOSAL_STATUS[p.status],
+        statusNum: p.status,
+        riskLevel: p.riskLevel,
+        createdAt: p.createdAt.toString(),
+        disputeCreatedAt: p.disputeCreatedAt.toString(),
+        arbitrationRequested: p.arbitrationRequested,
+        vetoRequested: p.vetoRequested,
+        vetoApproved: p.vetoApproved
+      }, null, 2);
+    } catch (e) { $('proposalInfo').innerText = '&#10060; 查询失败: ' + (e.reason || e.message || ''); }
+  }
+
+  async function getProposalFullInfo() {
+    if (!_U()) return alert('请先连接钱包');
+    const pid = $('proposalId').value;
+    try {
+      const r = await axios.get(BACKEND_API + '/proposals/' + pid + '/full-info');
+      $('proposalInfo').innerText = JSON.stringify(r.data, null, 2);
+    } catch (e) { $('proposalInfo').innerText = '&#10060; 获取失败: ' + (e.response?.data?.detail || e.message); }
+  }
+
+  function addVoteRow() {
+    const row = document.createElement('div');
+    row.className = 'vote-row form-row';
+    row.innerHTML = `
+      <label>提案 ID</label>
+      <input class="inp inp-sm inp-num vote-pid" type="number" placeholder="ID" value="0" min="0">
+      <label style="min-width:auto;">方案哈希</label>
+      <input class="inp inp-hash vote-hash" type="text" placeholder="0x..." size="66">
+      <label>票数</label>
+      <input class="inp inp-sm inp-num vote-amount" type="number" placeholder="0=全部" value="0" min="0" style="width:80px;" title="每票 = 100 CEAT，0 表示用全部质押余额投票">
+      <button class="btn btn-sm" style="background:rgba(255,80,80,0.2);color:#f55;border:none;cursor:pointer;" onclick="this.closest('.vote-row').remove()">✕</button>
+    `;
+    $('voteRows').appendChild(row);
+  }
+
+  async function vote() {
+    if (!_S()) return alert('请先连接钱包');
+    const rows = document.querySelectorAll('#voteRows .vote-row');
+    if (rows.length === 0) return alert('请添加至少一个投票');
+
+    const stakeInfo = await _A().getStakerInfo(_U());
+    const stakedBalance = parseFloat(ethers.utils.formatEther(stakeInfo.balance));
+
+    let success = 0, fail = 0;
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const pidEl = rows[i].querySelector('.vote-pid');
+      const hashEl = rows[i].querySelector('.vote-hash');
+      const amountEl = rows[i].querySelector('.vote-amount');
+      const pid = pidEl.value;
+      const hash = hashEl.value.trim();
+      const voteCount = parseInt(amountEl.value) || 0;
+
+      if (!hash) { fail++; errors.push('提案 #' + pid + ': 未填写方案哈希'); continue; }
+      const ch = ensureHexPrefix(hash);
+      if (!/^0x[0-9a-fA-F]{64}$/.test(ch)) { fail++; errors.push('提案 #' + pid + ': 哈希格式无效'); continue; }
+
+      try {
+        const p = await _A().getProposalSummary(pid);
+        if (PROPOSAL_STATUS[p.status] !== 'CommunityReview') { fail++; errors.push('提案 #' + pid + ': 不在投票阶段(当前' + PROPOSAL_STATUS[p.status] + ')'); continue; }
+        if (hash.toLowerCase() === p.auditReportHash.toLowerCase()) { fail++; errors.push('提案 #' + pid + ': 不能投审计团队方案'); continue; }
+        if (!p.auditReportHash || p.auditReportHash === '0x' + '0'.repeat(64) || p.auditReportHash === ethers.constants.HashZero) { fail++; errors.push('提案 #' + pid + ': 审计报告未提交'); continue; }
+
+        const requiredCEAT = voteCount > 0 ? voteCount * 100 : stakedBalance;
+        if (requiredCEAT > stakedBalance) { fail++; errors.push('提案 #' + pid + ': 质押不足(需' + requiredCEAT + ' CEAT, 余额' + stakedBalance + ' CEAT)'); continue; }
+
+        showPending('voteResult', '正在投票: 提案 #' + pid + ' (' + (i + 1) + '/' + rows.length + ')...');
+        const voteAmountWei = ethers.utils.parseEther(requiredCEAT.toString());
+        const tx = await _A().vote(pid, ch, voteAmountWei);
+        await tx.wait();
+        success++;
+      } catch (e) {
+        fail++;
+        let msg = e.message || '';
+        const m = msg.match(/reverted: (.+?)"/);
+        errors.push('提案 #' + pid + ': ' + (m ? m[1] : msg.slice(0, 60)));
+      }
+    }
+
+    let summary = '&#10004; 投票完成: 成功 ' + success + ' / 失败 ' + fail;
+    if (errors.length > 0) summary += '<br><span style="font-size:12px;color:rgba(255,255,255,0.6);">' + errors.join('<br>') + '</span>';
+    $('voteResult').className = fail === 0 ? 'msg success' : (success > 0 ? 'msg info' : 'msg error');
+    $('voteResult').innerHTML = summary;
+  }
+
+  async function queryCommunityProposals() {
+    if (!_A()) return alert('请先连接钱包');
+    const pid = $('queryProposalId').value;
+    const container = $('communityProposalsList');
+
+    try {
+      container.innerHTML = '<span class="spinner"></span> 正在查询...';
+      const hashes = await _A().getCommunityProposalHashes(pid);
+
+      if (!hashes || hashes.length === 0) {
+        container.innerHTML = '<div class="msg info" style="margin:0;"><span style="flex-shrink:0;">&#8505;</span> 该提案暂无已提交方案</div>';
+        return;
+      }
+
+      let html = '<div style="font-size:13px; color:rgba(255,255,255,0.5); margin-bottom:8px;">共 ' + hashes.length + ' 个方案</div>';
+      for (let i = 0; i < hashes.length; i++) {
+        const h = '0x' + hashes[i].substring(2);
+        let votes = '0';
+        try {
+          const votesWei = await _A().getCommunityProposalVotes(pid, hashes[i]);
+          const votesCEAT = parseFloat(ethers.utils.formatEther(votesWei));
+          votes = (votesCEAT / 100).toFixed(0);
+        } catch (e) {
+          votes = '查询失败';
+        }
+
+        html += '<div style="display:flex; align-items:center; gap:10px; padding:10px; margin-bottom:6px; background:rgba(255,255,255,0.04); border-radius:8px; border:1px solid rgba(255,255,255,0.06);">';
+        html += '<div style="font-size:18px; font-weight:700; color:#667eea; min-width:28px; text-align:center;">#' + (i + 1) + '</div>';
+        html += '<div style="flex:1; min-width:0;">';
+        html += '<div style="font-family:monospace; font-size:11px; color:#60a5fa; word-break:break-all;">' + h + '</div>';
+        html += '</div>';
+        html += '<div style="text-align:right; flex-shrink:0;">';
+        html += '<div style="font-size:11px; color:rgba(255,255,255,0.4);">票数</div>';
+        html += '<div style="font-size:18px; font-weight:700; color:#4ade80;">' + votes + '</div>';
+        html += '</div>';
+        html += '</div>';
+      }
+      container.innerHTML = html;
+    } catch (e) {
+      container.innerHTML = '<div class="msg error" style="margin:0;"><span style="flex-shrink:0;">&#10060;</span> 查询失败: ' + (e.reason || e.message || String(e)).slice(0, 200) + '</div>';
+    }
+  }
+
+  async function loadAuditTeamsUser() {
+    if (!_A()) {
+      const container = $('auditTeamsListUser');
+      container.innerHTML = '<div class="msg error" style="margin:0;"><span style="flex-shrink:0;">&#10060;</span> 请先连接钱包</div>';
+      return;
+    }
+    if (!_T()) {
+      const container = $('auditTeamsListUser');
+      container.innerHTML = '<div class="msg info" style="margin:0;"><span class="spinner" style="margin-right:8px;"></span> 正在初始化团队管理器，请稍后再试...</div>';
+      return;
+    }
+
+    const container = $('auditTeamsListUser');
+    container.innerHTML = "加载中...";
+
+    try {
+      const teamIds = await _T().getActiveAuditTeams();
+      
+      if (teamIds.length === 0) {
+        container.innerHTML = '<div style="color:rgba(255,255,255,0.5); padding:20px; text-align:center;">暂无活跃审计团队</div>';
+        return;
+      }
+
+      let html = '';
+      for (let i = 0; i < teamIds.length; i++) {
+        const teamId = teamIds[i];
+        const teamData = await _T().getAuditTeam(teamId);
+        const accuracy = await _T().getTeamAccuracy(teamId);
+        
+        const id = teamData[0].toString();
+        const contract = teamData[1];
+        const name = teamData[2];
+        const totalAudits = teamData[3].toString();
+        const successful = teamData[4].toString();
+        const reputation = teamData[5].toString();
+        const members = teamData[6];
+        const active = teamData[7];
+        const createdAt = new Date(Number(teamData[8].toString()) * 1000).toLocaleDateString();
+
+        html += `
+          <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+              <div>
+                <div style="font-size:16px; font-weight:600; color:#fff;">${name}</div>
+                <div style="font-size:12px; color:rgba(255,255,255,0.5);">团队ID: ${id}</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:24px; font-weight:700; color:#4ade80;">${accuracy}%</div>
+                <div style="font-size:12px; color:rgba(255,255,255,0.5);">准确率</div>
+              </div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:10px;">
+              <div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:8px;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.5);">完成审计</div>
+                <div style="font-size:16px; font-weight:600; color:#fff;">${totalAudits}</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:8px;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.5);">成功审计</div>
+                <div style="font-size:16px; font-weight:600; color:#4ade80;">${successful}</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:8px;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.5);">信誉分</div>
+                <div style="font-size:16px; font-weight:600; color:#fbbf24;">${reputation}/100</div>
+              </div>
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:12px; color:rgba(255,255,255,0.5); margin-bottom:4px;">合约地址</div>
+              <div style="font-family:monospace; font-size:12px; color:#60a5fa;">${contract.substring(0,16)}...${contract.substring(contract.length-8)}</div>
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:12px; color:rgba(255,255,255,0.5); margin-bottom:4px;">团队成员 (${members.length}人)</div>
+              <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                ${members.map(m => `<span style="font-family:monospace; font-size:11px; background:rgba(96,165,250,0.1); color:#60a5fa; padding:2px 6px; border-radius:4px;">${m.substring(0,8)}...</span>`).join('')}
+              </div>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding-top:8px; border-top:1px solid rgba(255,255,255,0.1);">
+              <div style="font-size:12px; color:rgba(255,255,255,0.5);">创建于 ${createdAt}</div>
+            </div>
+          </div>
+        `;
+      }
+      container.innerHTML = html;
+    } catch (e) {
+      console.error("加载审计团队失败:", e);
+      container.innerHTML = `<div class="msg error" style="margin:0;"><span style="flex-shrink:0;">&#10060;</span> 加载失败: ${e.message}</div>`;
+    }
+  }
+
+  async function loadCommitteeMembers() {
+    const container = $('committeeMembersList');
+    container.innerHTML = '<div class="msg info" style="margin:0;"><span class="spinner"></span> 加载中...</div>';
+
+    try {
+      const res = await axios.get(BACKEND_API + '/committee/members');
+      const members = res.data;
+
+      if (!members || members.length === 0) {
+        container.innerHTML = '<div style="color:rgba(255,255,255,0.5); padding:20px; text-align:center;">暂无委员会成员</div>';
+        return;
+      }
+
+      let html = '';
+      for (let i = 0; i < members.length; i++) {
+        const m = members[i];
+        const balance = (parseInt(m.balance) / 1e18).toFixed(2);
+        const rewards = (parseInt(m.rewards) / 1e18).toFixed(2);
+        const points = m.contributionPoints;
+        const score = m.reputationScore;
+
+        html += `
+          <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+              <div>
+                <div style="font-size:15px; font-weight:600; color:#fff;">委员会成员 #${i + 1}</div>
+                <div style="font-family:monospace; font-size:12px; color:#60a5fa; margin-top:4px; word-break:break-all;">${m.address}</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:22px; font-weight:700; color:#fbbf24;">${score}</div>
+                <div style="font-size:11px; color:rgba(255,255,255,0.5);">信誉分</div>
+              </div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;">
+              <div style="background:rgba(255,255,255,0.04); padding:8px; border-radius:8px;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.5);">质押余额</div>
+                <div style="font-size:15px; font-weight:600; color:#4ade80;">${balance} CEAT</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.04); padding:8px; border-radius:8px;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.5);">待领奖励</div>
+                <div style="font-size:15px; font-weight:600; color:#60a5fa;">${rewards} CEAT</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.04); padding:8px; border-radius:8px;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.5);">贡献积分</div>
+                <div style="font-size:15px; font-weight:600; color:#c084fc;">${points}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      container.innerHTML = html;
+    } catch (e) {
+      console.error("加载委员会成员失败:", e);
+      container.innerHTML = `<div class="msg error" style="margin:0;"><span style="flex-shrink:0;">&#10060;</span> 加载失败: ${e.response?.data?.detail || e.message}</div>`;
+    }
+  }
+
+  async function loadAvailableTasks() {
+    const container = $('availableTasksList');
+    container.innerHTML = '<div class="msg info" style="margin:0;"><span class="spinner"></span> 加载中...</div>';
+
+    try {
+      const response = await axios.get(`${BACKEND_API}/audit-team/available-proposals`);
+      const proposals = response.data;
+
+      if (!proposals || proposals.length === 0) {
+        container.innerHTML = '<div class="msg info" style="margin:0;"><span style="flex-shrink:0;">ℹ️</span> 暂无可用任务</div>';
+        return;
+      }
+
+      let html = '';
+      for (const p of proposals) {
+        try {
+          let codeHash = p.code_hash || '';
+          let riskLevel = 0;
+          let onChainStatus = 0;
+
+          if (_A()) {
+            try {
+              const summary = await _A().getProposalSummary(p.proposal_id);
+              if (summary && summary.codeHash && summary.codeHash !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
+                codeHash = summary.codeHash;
+              }
+              riskLevel = Number(summary.riskLevel || 0);
+              onChainStatus = Number(summary.status || 0);
+            } catch (e) {
+              console.warn(`获取提案 #${p.proposal_id} 链上摘要失败:`, e.message);
+            }
+          }
+
+          const statusLabel = PROPOSAL_STATUS[onChainStatus] || p.status || 'Submitted';
+          const riskLabels = ['None', 'Low', 'Medium', 'High', 'Critical'];
+          const riskColors = ['#4ade80', '#60a5fa', '#fbbf24', '#f87171', '#ef4444'];
+
+          html += `
+            <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:16px;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                <div>
+                  <div style="font-size:16px; font-weight:600; color:#fff;">提案 #${p.proposal_id}</div>
+                  <div style="font-size:12px; color:rgba(255,255,255,0.5);">状态: ${statusLabel}</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-size:12px; color:rgba(255,255,255,0.5);">风险等级</div>
+                  <div style="font-size:14px; font-weight:600; color:${riskColors[riskLevel] || '#4ade80'};">${riskLabels[riskLevel] || 'None'}</div>
+                </div>
+              </div>
+              <div style="margin-bottom:10px;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.5); margin-bottom:4px;">代码哈希</div>
+                <div style="font-family:monospace; font-size:11px; color:#60a5fa; word-break:break-all;">${codeHash}</div>
+              </div>
+              <div id="task-actions-${p.proposal_id}" style="display:flex; gap:8px; margin-top:8px;">
+                <button class="btn btn-primary btn-sm" data-pid="${p.proposal_id}" onclick="claimCommunityTask(${p.proposal_id})">领取提案</button>
+              </div>
+            </div>
+          `;
+        } catch (e) {
+          console.error(`处理提案 ${p.proposal_id} 失败:`, e);
+        }
+      }
+
+      if (html === '') {
+        container.innerHTML = '<div class="msg info" style="margin:0;"><span style="flex-shrink:0;">ℹ️</span> 暂无可用任务</div>';
+      } else {
+        container.innerHTML = html;
+      }
+    } catch (e) {
+      console.error("加载任务失败:", e);
+      container.innerHTML = `<div class="msg error" style="margin:0;"><span style="flex-shrink:0;">&#10060;</span> 加载失败: ${e.response?.data?.detail || e.message}</div>`;
+    }
+  }
+
+  async function claimCommunityTask(proposalId) {
+    if (!Wallet.getSigner()) return alert("请先连接钱包");
+
+    const actionsDiv = document.getElementById(`task-actions-${proposalId}`);
+    if (!actionsDiv) return alert('找不到对应操作区域');
+
+    const btn = actionsDiv.querySelector(`button[data-pid="${proposalId}"]`);
+    if (!btn) return alert('找不到对应按钮');
+    btn.innerText = '处理中...';
+    btn.disabled = true;
+
+    try {
+      const response = await axios.post(`${BACKEND_API}/audit-team/claim-proposal`, {
+        proposal_id: proposalId
+      });
+
+      if (response.data.status === "success") {
+        alert('领取提案成功！提案 #' + proposalId + ' 已成功领取。');
+
+        actionsDiv.innerHTML = `
+          <button class="btn btn-success btn-sm" onclick="goToCommunityReportWriting(${proposalId})">社区审计报告编写</button>
+        `;
+      } else {
+        btn.innerText = '领取提案';
+        btn.disabled = false;
+        alert("领取提案失败: " + (response.data.detail || "未知错误"));
+      }
+    } catch (e) {
+      btn.innerText = '领取提案';
+      btn.disabled = false;
+      alert("领取提案失败: " + (e.response?.data?.detail || e.message));
+    }
+  }
+
+  function goToCommunityReportWriting(proposalId) {
+    window.location.href = 'community-report-writing.html?proposal_id=' + proposalId;
+  }
+
+  Wallet.setCallbacks(function(addr) { loadUserBalance(); document.getElementById('connectBtn').textContent = '已连接'; }, function() { showInfo('balanceInfo', '连接钱包后点击"获取余额"查看 CEAT 余额'); document.getElementById('connectBtn').disabled = false; document.getElementById('connectBtn').textContent = '连接钱包'; });
+  Wallet.registerEvents();
+  Wallet.autoConnect();
+</script>
+</body>
+</html>

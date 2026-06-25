@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CreatDAO - 社区审计报告编写</title>
+  <link rel="stylesheet" href="common.css?v=2">
+  <script src="lib/ethers.min.js?v=2"></script>
+  <script src="lib/axios.min.js?v=2"></script>
+  <script src="lib/sha256.min.js?v=2"></script>
+  <script src="common.js?v=2"></script>
+  <script src="config.js?v=4"></script>
+  <script src="contract.js?v=6"></script>
+  <script src="wallet.js?v=3"></script>
+  <style>
+    .report-preview {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 24px;
+      white-space: pre-wrap;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      color: rgba(255,255,255,0.8);
+      max-height: 500px;
+      overflow-y: auto;
+    }
+    .contributor-item {
+      background: rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .contributor-item .item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .contributor-item .item-number {
+      font-size: 14px;
+      font-weight: 700;
+      color: #667eea;
+    }
+    .contributor-item .item-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+    }
+    .checkbox-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: #667eea;
+    }
+    .checkbox-row label {
+      font-size: 13px;
+      color: #e0e0e0;
+    }
+    .vote-option-item {
+      background: rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 8px;
+    }
+    .vote-option-item .option-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .vote-option-item .option-label {
+      font-weight: 600;
+      color: #667eea;
+      font-size: 13px;
+      min-width: 50px;
+    }
+    .vote-option-item .inp-sm {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 13px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.06);
+      color: #e0e0e0;
+      outline: none;
+    }
+    .vote-option-item .inp-sm:focus {
+      border-color: rgba(102,126,234,0.4);
+    }
+    .signature-item {
+      background: rgba(102,126,234,0.06);
+      border: 1px solid rgba(102,126,234,0.15);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+    .signature-item .sig-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .signature-item .sig-label {
+      font-weight: 600;
+      color: #667eea;
+      font-size: 13px;
+    }
+    .signature-item .sig-addr {
+      font-family: monospace;
+      font-size: 12px;
+      color: #60a5fa;
+    }
+    .inp-textarea {
+      min-height: 80px;
+      resize: vertical;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 11px 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      font-size: 14px;
+      background: rgba(0,0,0,0.28);
+      color: #e8e8e8;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+    .inp-textarea:focus {
+      border-color: rgba(102,126,234,0.5);
+      box-shadow: 0 0 0 3px rgba(102,126,234,0.12);
+    }
+    .inp-textarea.large {
+      min-height: 180px;
+    }
+    @media (max-width: 700px) {
+      body { padding: 12px; }
+      .header { padding: 16px; flex-direction: column; align-items: stretch; }
+      .form-row { flex-direction: column; align-items: stretch; }
+      .form-row label { min-width: auto; }
+      .card { padding: 14px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app-container">
+
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">📋</div>
+      <div class="title">
+        <h1>社区审计报告编写</h1>
+        <span>CreatDAO Community Audit Report</span>
+      </div>
+    </div>
+    <button class="btn btn-outline" onclick="window.location.href='dashboard.html'">返回用户端</button>
+  </header>
+
+  <div class="panel-header">
+    <h1>社区审计报告</h1>
+    <p>社区报告必须支撑贡献度证明和防止女巫攻击机制</p>
+    <div class="divider" style="width:60px;height:3px;background:linear-gradient(90deg,#667eea,#764ba2);border-radius:2px;margin:16px auto 0;"></div>
+  </div>
+
+  <!-- 提案信息 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">📋</div>
+      <div>
+        <div class="card-title">提案基本信息</div>
+        <div class="card-desc">填写审计提案的基本信息</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>提案 ID</label>
+        <input id="proposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+        <label>代码哈希</label>
+        <input id="codeHash" class="inp inp-hash" type="text" placeholder="0x..." readonly>
+      </div>
+      <div class="form-row">
+        <label>合约地址</label>
+        <input id="contractAddress" class="inp inp-hash" type="text" placeholder="0x...">
+      </div>
+      <div class="form-row">
+        <button class="btn btn-outline btn-sm" onclick="loadProposalInfo()">加载提案信息</button>
+        <button class="btn btn-outline btn-sm" onclick="loadExistingReport()">加载已保存报告</button>
+        <span id="proposalStatus" style="font-size:12px;color:rgba(255,255,255,0.5);"></span>
+      </div>
+      <div id="proposalInfoMsg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- 一、共识投票结果证明 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon orange">🗳️</div>
+      <div>
+        <div class="card-title">一、共识投票结果证明</div>
+        <div class="card-desc">包含提案ID、投票快照区块高度、选项分布等链上记录</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>提案 ID</label>
+        <input id="consensusProposalId" class="inp inp-sm inp-num" type="number" placeholder="关联提案ID" min="0">
+      </div>
+      <div class="form-row">
+        <label>投票快照区块高度</label>
+        <input id="snapshotBlockHeight" class="inp inp-sm inp-num" type="number" placeholder="投票快照时的区块高度" min="0">
+      </div>
+      <div class="form-row full-width" style="margin-top: 12px;">
+        <label style="font-size:14px;color:rgba(255,255,255,0.7);">投票选项分布</label>
+      </div>
+      <div id="voteOptionsList">
+        <div class="vote-option-item">
+          <div class="option-header">
+            <span class="option-label">选项 #1</span>
+            <input class="inp-sm" style="flex:1;" type="text" placeholder="方案哈希 (0x...)">
+            <input class="inp inp-sm inp-num" type="number" placeholder="得票数" min="0" value="0" style="width:100px;">
+            <input class="inp-sm" type="text" placeholder="得票占比(%)" style="width:80px;">
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="addVoteOption()" style="align-self:flex-start;">+ 添加投票选项</button>
+
+      <div class="form-row full-width" style="margin-top: 12px;">
+        <label>链上投票记录摘要</label>
+        <textarea id="voteSummary" class="inp-textarea" placeholder="描述投票的链上记录情况，包括交易哈希、验证节点等信息..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- 二、贡献者名单 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon green">👥</div>
+      <div>
+        <div class="card-title">二、贡献者名单</div>
+        <div class="card-desc">详细记录每个地址的发现内容、是否为首次发现者、报告质量、是否提供了有效修复方案等。这是后续按贡献度精准分发代币奖励的直接依据。</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="contributorsList">
+        <div class="contributor-item">
+          <div class="item-header">
+            <span class="item-number">贡献者 #1</span>
+            <div class="item-actions">
+              <button class="btn btn-outline btn-sm" onclick="removeContributor(this)">✕ 删除</button>
+            </div>
+          </div>
+          <div class="form-row" style="margin-bottom: 8px;">
+            <label>钱包地址</label>
+            <input class="inp inp-hash contributor-addr" type="text" placeholder="0x..." style="flex:1;min-width:250px;">
+          </div>
+          <div class="form-row" style="margin-bottom: 8px;">
+            <label>发现内容</label>
+            <input class="inp inp-wide contributor-discovery" type="text" placeholder="描述该贡献者发现的具体内容（漏洞、问题、改进建议等）" style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
+          </div>
+          <div class="form-row" style="margin-bottom: 8px;">
+            <label>报告质量</label>
+            <select class="inp inp-sm contributor-quality" style="width:150px;">
+              <option value="excellent">优秀</option>
+              <option value="good">良好</option>
+              <option value="average">一般</option>
+              <option value="poor">较差</option>
+            </select>
+          </div>
+          <div class="form-row" style="gap: 20px;">
+            <div class="checkbox-row" style="padding: 0;">
+              <input type="checkbox" class="contributor-first">
+              <label>首次发现者</label>
+            </div>
+            <div class="checkbox-row" style="padding: 0;">
+              <input type="checkbox" class="contributor-fix">
+              <label>提供有效修复方案</label>
+            </div>
+          </div>
+          <div class="form-row" style="margin-top: 8px;">
+            <label>修复方案描述</label>
+            <input class="inp inp-wide contributor-fixdesc" type="text" placeholder="如果提供了修复方案，请简要描述" style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
+          </div>
+          <div class="form-row" style="margin-top: 8px;">
+            <label>贡献度评分</label>
+            <input class="inp inp-sm inp-num contributor-score" type="number" placeholder="1-100" min="1" max="100" value="50" style="width:100px;">
+            <span style="font-size:12px;color:rgba(255,255,255,0.4);">用于后续代币奖励分配</span>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="addContributor()" style="align-self:flex-start;">+ 添加贡献者</button>
+
+      <div class="form-row full-width" style="margin-top: 12px;">
+        <label>贡献度证明总结</label>
+        <textarea id="contributionProofSummary" class="inp-textarea large" placeholder="总结贡献度证明的总体情况，说明如何区分首次发现者和后续贡献者，以及贡献度评估标准..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- 三、对齐意见书 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon cyan">🤝</div>
+      <div>
+        <div class="card-title">三、对齐意见书</div>
+        <div class="card-desc">体现社区对审计团队报告结论的看法，逐条回应对齐程度</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row full-width">
+        <label>对审计团队报告的总体评价</label>
+        <textarea id="overallEvaluation" class="inp-textarea large" placeholder="社区对审计团队报告的整体看法，包括是否认可其结论、审计方法是否合理、覆盖范围是否充分等..."></textarea>
+      </div>
+
+      <div class="form-row full-width" style="margin-top: 4px;">
+        <label style="font-size:14px;color:rgba(255,255,255,0.7);">逐条对齐意见</label>
+      </div>
+      <div id="alignmentItemsList">
+        <div class="vote-option-item" style="border-color:rgba(0,188,212,0.15);">
+          <div class="option-header">
+            <span class="option-label" style="color:#80deea;">对齐项 #1</span>
+            <select class="inp inp-sm alignment-result" style="width:100px;">
+              <option value="agree">同意</option>
+              <option value="partial">部分同意</option>
+              <option value="disagree">不同意</option>
+            </select>
+            <button class="btn btn-outline btn-sm" onclick="removeAlignmentItem(this)" style="align-self:flex-start;">✕</button>
+          </div>
+          <div style="margin-bottom: 8px;">
+            <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:4px;">审计团队发现描述</div>
+            <input class="inp-sm" style="width:100%;font-family:-apple-system,BlinkMacSystemFont,sans-serif;" type="text" placeholder="审计团队报告中的具体发现或结论...">
+          </div>
+          <div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:4px;">社区回应意见</div>
+            <textarea class="inp-textarea alignment-response" placeholder="社区对该发现的技术回应和理由说明..."></textarea>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="addAlignmentItem()" style="align-self:flex-start;">+ 添加对齐意见项</button>
+
+      <div class="form-row full-width" style="margin-top: 12px;">
+        <label>防女巫攻击说明</label>
+        <textarea id="antiSybilDescription" class="inp-textarea" placeholder="说明本报告如何防止女巫攻击，包括地址聚类分析、质押门槛验证、行为模式检测等措施..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- 四、签名与申领 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon red">✍️</div>
+      <div>
+        <div class="card-title">四、签名与申领</div>
+        <div class="card-desc">社区的报告结论应通过多签或可验证随机函数等形式，由投票胜出的贡献者进行签名认证，作为最终提交的凭证。</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>签名方式</label>
+        <select id="signatureMethod" class="inp inp-sm" style="width:180px;">
+          <option value="multisig">多签 (Multi-Sig)</option>
+          <option value="vrf">可验证随机函数 (VRF)</option>
+          <option value="threshold">阈值签名 (Threshold)</option>
+        </select>
+      </div>
+
+      <div class="form-row full-width" style="margin-top: 4px;">
+        <label style="font-size:14px;color:rgba(255,255,255,0.7);">签名者列表</label>
+      </div>
+      <div id="signaturesList">
+        <div class="signature-item">
+          <div class="sig-header">
+            <span class="sig-label">签名者 #1</span>
+            <button class="btn btn-outline btn-sm" onclick="removeSignature(this)">✕</button>
+          </div>
+          <div class="form-row" style="margin-bottom: 6px;">
+            <label>地址</label>
+            <input class="inp inp-hash sig-addr" type="text" placeholder="0x..." style="flex:1;min-width:250px;">
+          </div>
+          <div class="form-row" style="margin-bottom: 6px;">
+            <label>签名数据</label>
+            <input class="inp inp-hash sig-data" type="text" placeholder="签名字节 (0x...)" style="flex:1;min-width:250px;">
+          </div>
+          <div class="form-row">
+            <label>签名时间</label>
+            <input class="inp inp-sm sig-time" type="datetime-local" style="width:220px;">
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="addSignature()" style="align-self:flex-start;">+ 添加签名者</button>
+
+      <div class="form-row" style="margin-top: 12px;">
+        <button class="btn btn-primary" onclick="signWithWallet()">🎫 使用钱包签名</button>
+        <span style="font-size:12px;color:rgba(255,255,255,0.4);">用当前连接的钱包对报告哈希进行签名</span>
+      </div>
+      <div id="signResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- 五、提交区域 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">📤</div>
+      <div>
+        <div class="card-title">提交报告</div>
+        <div class="card-desc">生成社区报告哈希并提交至链上</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="hashDisplay" style="display: none;">
+        <div style="font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 6px;">社区报告哈希（SHA-256）：</div>
+        <div class="code-block" id="reportHash">0x...</div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="fillSample()">📝 填写样例</button>
+        <button class="btn btn-primary" onclick="generateReport()">生成报告</button>
+        <button class="btn btn-success" onclick="previewReport()" id="previewBtn" disabled>预览报告</button>
+        <button class="btn btn-outline" onclick="saveReportDraft()">💾 保存草稿</button>
+        <button class="btn btn-primary" onclick="submitReportToChain()" id="submitChainBtn" disabled>提交至链上</button>
+      </div>
+
+      <div id="submitResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- 报告预览区域 -->
+  <div class="card" id="previewCard" style="display: none;">
+    <div class="card-header">
+      <div class="card-icon purple">👁️</div>
+      <div>
+        <div class="card-title">报告预览</div>
+        <div class="card-desc">社区审计报告完整内容预览</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="report-preview" id="reportPreview"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const BACKEND_API = CONFIG.API_BASE;
+  let selectedRisk = '';
+  let reportData = {};
+  let reportHash = '';
+
+  function _A() { return Wallet.getContracts().auditDAO; }
+  function _S() { return Wallet.getSigner(); }
+  function _U() { return Wallet.getAddress(); }
+
+  (function init() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const pid = urlParams.get('proposal_id');
+    if (pid) {
+      $('proposalId').value = pid;
+      $('consensusProposalId').value = pid;
+      loadProposalInfo();
+      loadExistingReport();
+    }
+  })();
+
+  async function loadProposalInfo() {
+    const pid = $('proposalId').value;
+    if (!pid || pid <= 0) {
+      showInfo('proposalInfoMsg', '请输入提案 ID 后加载');
+      return;
+    }
+    showPending('proposalInfoMsg', '正在加载提案信息...');
+    try {
+      const r = await axios.get(BACKEND_API + '/proposals/' + pid + '/full-info');
+      const data = r.data;
+      $('codeHash').value = data['代码哈希(codeHash)'] || '';
+      $('consensusProposalId').value = data['提案ID'] || pid;
+      $('proposalStatus').innerText = '状态: ' + (data['状态(中文)'] || data['状态'] || 'Unknown');
+      showSuccess('proposalInfoMsg', '提案信息加载成功');
+    } catch (e) {
+      showError('proposalInfoMsg', '加载失败: ' + (e.response?.data?.detail || e.message));
+    }
+  }
+
+  async function loadExistingReport() {
+    const pid = $('proposalId').value;
+    const addr = _U();
+    if (!pid || pid <= 0 || !addr) return;
+    try {
+      const r = await axios.get(BACKEND_API + '/community-report/' + pid + '/' + addr);
+      const data = r.data;
+      if (data.snapshot_block_height) $('snapshotBlockHeight').value = data.snapshot_block_height;
+      if (data.consensus_proof) {
+        try {
+          const proof = JSON.parse(data.consensus_proof);
+          if (proof.voteOptions && proof.voteOptions.length > 0) {
+            const list = $('voteOptionsList');
+            list.innerHTML = '';
+            proof.voteOptions.forEach(function(opt, i) {
+              addVoteOptionInternal(opt.hash || '', opt.votes || 0, opt.pct || '');
+            });
+            if (proof.voteSummary) $('voteSummary').value = proof.voteSummary;
+          }
+          if (proof.voteSummary) $('voteSummary').value = proof.voteSummary;
+        } catch (e) {}
+      }
+      if (data.contributors) {
+        try {
+          const contributors = JSON.parse(data.contributors);
+          const list = $('contributorsList');
+          list.innerHTML = '';
+          contributors.forEach(function(c, i) {
+            addContributorInternal(
+              c.address || '', c.discovery_content || '',
+              c.is_first_discoverer || false, c.report_quality || 'average',
+              c.has_effective_fix || false, c.fix_description || '',
+              c.score || 50
+            );
+          });
+        } catch (e) {}
+      }
+      if (data.alignment_statement) {
+        try {
+          const alignment = JSON.parse(data.alignment_statement);
+          if (alignment.overallEvaluation) $('overallEvaluation').value = alignment.overallEvaluation;
+          if (alignment.antiSybilDescription) $('antiSybilDescription').value = alignment.antiSybilDescription;
+          if (alignment.items && alignment.items.length > 0) {
+            const list = $('alignmentItemsList');
+            list.innerHTML = '';
+            alignment.items.forEach(function(item, i) {
+              addAlignmentItemInternal(item.finding || '', item.response || '', item.result || 'agree');
+            });
+          }
+        } catch (e) {}
+      }
+      if (data.signatures) {
+        try {
+          const sigs = JSON.parse(data.signatures);
+          if (sigs.method) $('signatureMethod').value = sigs.method;
+          if (sigs.signers && sigs.signers.length > 0) {
+            const list = $('signaturesList');
+            list.innerHTML = '';
+            sigs.signers.forEach(function(s, i) {
+              addSignatureInternal(s.address || '', s.signature || '', s.time || '');
+            });
+          }
+        } catch (e) {}
+      }
+      if (data.report_hash) {
+        reportHash = data.report_hash;
+        $('reportHash').textContent = reportHash;
+        $('hashDisplay').style.display = 'block';
+        $('previewBtn').disabled = false;
+        $('submitChainBtn').disabled = false;
+      }
+      showSuccess('proposalInfoMsg', '已加载保存的报告草稿');
+    } catch (e) {
+      if (e.response && e.response.status !== 404) {
+        console.log('加载已有报告失败:', e.message);
+      }
+    }
+  }
+
+  function addVoteOption() {
+    addVoteOptionInternal('', 0, '');
+  }
+
+  function addVoteOptionInternal(hash, votes, pct) {
+    const list = $('voteOptionsList');
+    const idx = list.querySelectorAll('.vote-option-item').length + 1;
+    const div = document.createElement('div');
+    div.className = 'vote-option-item';
+    div.innerHTML =
+      '<div class="option-header">' +
+        '<span class="option-label">选项 #' + idx + '</span>' +
+        '<input class="inp-sm" style="flex:1;" type="text" placeholder="方案哈希 (0x...)" value="' + (hash || '') + '">' +
+        '<input class="inp inp-sm inp-num" type="number" placeholder="得票数" min="0" value="' + votes + '" style="width:100px;">' +
+        '<input class="inp-sm" type="text" placeholder="得票占比(%)" value="' + (pct || '') + '" style="width:80px;">' +
+        '<button class="btn btn-outline btn-sm" onclick="this.closest(\'.vote-option-item\').remove()">✕</button>' +
+      '</div>';
+    list.appendChild(div);
+  }
+
+  function addContributor() {
+    addContributorInternal('', '', false, 'average', false, '', 50);
+  }
+
+  function addContributorInternal(addr, discovery, first, quality, fix, fixdesc, score) {
+    const list = $('contributorsList');
+    const idx = list.querySelectorAll('.contributor-item').length + 1;
+    const div = document.createElement('div');
+    div.className = 'contributor-item';
+    div.innerHTML =
+      '<div class="item-header">' +
+        '<span class="item-number">贡献者 #' + idx + '</span>' +
+        '<div class="item-actions">' +
+          '<button class="btn btn-outline btn-sm" onclick="removeContributor(this)">✕ 删除</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="form-row" style="margin-bottom:8px;">' +
+        '<label>钱包地址</label>' +
+        '<input class="inp inp-hash contributor-addr" type="text" placeholder="0x..." value="' + addr + '" style="flex:1;min-width:250px;">' +
+      '</div>' +
+      '<div class="form-row" style="margin-bottom:8px;">' +
+        '<label>发现内容</label>' +
+        '<input class="inp inp-wide contributor-discovery" type="text" placeholder="描述该贡献者发现的具体内容" value="' + discovery + '" style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' +
+      '</div>' +
+      '<div class="form-row" style="margin-bottom:8px;">' +
+        '<label>报告质量</label>' +
+        '<select class="inp inp-sm contributor-quality" style="width:150px;">' +
+          '<option value="excellent"' + (quality === 'excellent' ? ' selected' : '') + '>优秀</option>' +
+          '<option value="good"' + (quality === 'good' ? ' selected' : '') + '>良好</option>' +
+          '<option value="average"' + (quality === 'average' ? ' selected' : '') + '>一般</option>' +
+          '<option value="poor"' + (quality === 'poor' ? ' selected' : '') + '>较差</option>' +
+        '</select>' +
+      '</div>' +
+      '<div class="form-row" style="gap:20px;">' +
+        '<div class="checkbox-row" style="padding:0;">' +
+          '<input type="checkbox" class="contributor-first"' + (first ? ' checked' : '') + '>' +
+          '<label>首次发现者</label>' +
+        '</div>' +
+        '<div class="checkbox-row" style="padding:0;">' +
+          '<input type="checkbox" class="contributor-fix"' + (fix ? ' checked' : '') + '>' +
+          '<label>提供有效修复方案</label>' +
+        '</div>' +
+      '</div>' +
+      '<div class="form-row" style="margin-top:8px;">' +
+        '<label>修复方案描述</label>' +
+        '<input class="inp inp-wide contributor-fixdesc" type="text" placeholder="如果提供了修复方案，请简要描述" value="' + fixdesc + '" style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' +
+      '</div>' +
+      '<div class="form-row" style="margin-top:8px;">' +
+        '<label>贡献度评分</label>' +
+        '<input class="inp inp-sm inp-num contributor-score" type="number" placeholder="1-100" min="1" max="100" value="' + score + '" style="width:100px;">' +
+        '<span style="font-size:12px;color:rgba(255,255,255,0.4);">用于后续代币奖励分配</span>' +
+      '</div>';
+    list.appendChild(div);
+  }
+
+  function removeContributor(btn) {
+    const item = btn.closest('.contributor-item');
+    if (item && item.parentNode.querySelectorAll('.contributor-item').length > 1) {
+      item.remove();
+    }
+  }
+
+  function addAlignmentItem() {
+    addAlignmentItemInternal('', '', 'agree');
+  }
+
+  function addAlignmentItemInternal(finding, response, result) {
+    const list = $('alignmentItemsList');
+    const idx = list.querySelectorAll('.vote-option-item').length + 1;
+    const div = document.createElement('div');
+    div.className = 'vote-option-item';
+    div.style.borderColor = 'rgba(0,188,212,0.15)';
+    div.innerHTML =
+      '<div class="option-header">' +
+        '<span class="option-label" style="color:#80deea;">对齐项 #' + idx + '</span>' +
+        '<select class="inp inp-sm alignment-result" style="width:100px;">' +
+          '<option value="agree"' + (result === 'agree' ? ' selected' : '') + '>同意</option>' +
+          '<option value="partial"' + (result === 'partial' ? ' selected' : '') + '>部分同意</option>' +
+          '<option value="disagree"' + (result === 'disagree' ? ' selected' : '') + '>不同意</option>' +
+        '</select>' +
+        '<button class="btn btn-outline btn-sm" onclick="removeAlignmentItem(this)" style="align-self:flex-start;">✕</button>' +
+      '</div>' +
+      '<div style="margin-bottom:8px;">' +
+        '<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:4px;">审计团队发现描述</div>' +
+        '<input class="inp-sm" style="width:100%;font-family:-apple-system,BlinkMacSystemFont,sans-serif;" type="text" placeholder="审计团队报告中的具体发现或结论..." value="' + finding + '">' +
+      '</div>' +
+      '<div>' +
+        '<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:4px;">社区回应意见</div>' +
+        '<textarea class="inp-textarea alignment-response" placeholder="社区对该发现的技术回应和理由说明...">' + response + '</textarea>' +
+      '</div>';
+    list.appendChild(div);
+  }
+
+  function removeAlignmentItem(btn) {
+    const item = btn.closest('.vote-option-item');
+    if (item && item.parentNode.querySelectorAll('.vote-option-item').length > 1) {
+      item.remove();
+    }
+  }
+
+  function addSignature() {
+    addSignatureInternal('', '', '');
+  }
+
+  function addSignatureInternal(addr, sig, time) {
+    const list = $('signaturesList');
+    const idx = list.querySelectorAll('.signature-item').length + 1;
+    const div = document.createElement('div');
+    div.className = 'signature-item';
+    div.innerHTML =
+      '<div class="sig-header">' +
+        '<span class="sig-label">签名者 #' + idx + '</span>' +
+        '<button class="btn btn-outline btn-sm" onclick="removeSignature(this)">✕</button>' +
+      '</div>' +
+      '<div class="form-row" style="margin-bottom:6px;">' +
+        '<label>地址</label>' +
+        '<input class="inp inp-hash sig-addr" type="text" placeholder="0x..." value="' + addr + '" style="flex:1;min-width:250px;">' +
+      '</div>' +
+      '<div class="form-row" style="margin-bottom:6px;">' +
+        '<label>签名数据</label>' +
+        '<input class="inp inp-hash sig-data" type="text" placeholder="签名字节 (0x...)" value="' + sig + '" style="flex:1;min-width:250px;">' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<label>签名时间</label>' +
+        '<input class="inp inp-sm sig-time" type="datetime-local" value="' + time + '" style="width:220px;">' +
+      '</div>';
+    list.appendChild(div);
+  }
+
+  function removeSignature(btn) {
+    const item = btn.closest('.signature-item');
+    if (item && item.parentNode.querySelectorAll('.signature-item').length > 1) {
+      item.remove();
+    }
+  }
+
+  function collectVoteOptions() {
+    const items = document.querySelectorAll('#voteOptionsList .vote-option-item');
+    const options = [];
+    items.forEach(function(item) {
+      const inputs = item.querySelectorAll('input');
+      const hash = inputs[0]?.value?.trim() || '';
+      const votes = parseInt(inputs[1]?.value) || 0;
+      const pct = inputs[2]?.value?.trim() || '';
+      if (hash) {
+        options.push({ hash: hash, votes: votes, pct: pct });
+      }
+    });
+    return options;
+  }
+
+  function collectContributors() {
+    const items = document.querySelectorAll('#contributorsList .contributor-item');
+    const contributors = [];
+    items.forEach(function(item) {
+      const addr = item.querySelector('.contributor-addr')?.value?.trim() || '';
+      if (addr) {
+        contributors.push({
+          address: addr,
+          discovery_content: item.querySelector('.contributor-discovery')?.value?.trim() || '',
+          is_first_discoverer: item.querySelector('.contributor-first')?.checked || false,
+          report_quality: item.querySelector('.contributor-quality')?.value || 'average',
+          has_effective_fix: item.querySelector('.contributor-fix')?.checked || false,
+          fix_description: item.querySelector('.contributor-fixdesc')?.value?.trim() || '',
+          score: parseInt(item.querySelector('.contributor-score')?.value) || 50
+        });
+      }
+    });
+    return contributors;
+  }
+
+  function collectAlignmentItems() {
+    const items = document.querySelectorAll('#alignmentItemsList .vote-option-item');
+    const alignmentItems = [];
+    items.forEach(function(item) {
+      const inputs = item.querySelectorAll('input');
+      const textareas = item.querySelectorAll('textarea');
+      const finding = inputs[0]?.value?.trim() || '';
+      const response = textareas[0]?.value?.trim() || '';
+      if (finding || response) {
+        alignmentItems.push({
+          finding: finding,
+          response: response,
+          result: item.querySelector('.alignment-result')?.value || 'agree'
+        });
+      }
+    });
+    return alignmentItems;
+  }
+
+  function collectSignatures() {
+    const items = document.querySelectorAll('#signaturesList .signature-item');
+    const signers = [];
+    items.forEach(function(item) {
+      const addr = item.querySelector('.sig-addr')?.value?.trim() || '';
+      if (addr) {
+        signers.push({
+          address: addr,
+          signature: item.querySelector('.sig-data')?.value?.trim() || '',
+          time: item.querySelector('.sig-time')?.value || ''
+        });
+      }
+    });
+    return signers;
+  }
+
+  function generateReport() {
+    const pid = $('proposalId').value;
+    if (!pid || pid <= 0) {
+      alert('请先填写提案 ID');
+      $('proposalId').focus();
+      return;
+    }
+
+    const consensusProof = {
+      proposalId: parseInt($('consensusProposalId').value) || 0,
+      snapshotBlockHeight: parseInt($('snapshotBlockHeight').value) || 0,
+      voteOptions: collectVoteOptions(),
+      voteSummary: $('voteSummary').value.trim()
+    };
+
+    const contributors = collectContributors();
+
+    const alignmentStatement = {
+      overallEvaluation: $('overallEvaluation').value.trim(),
+      items: collectAlignmentItems(),
+      antiSybilDescription: $('antiSybilDescription').value.trim()
+    };
+
+    const signatures = {
+      method: $('signatureMethod').value,
+      signers: collectSignatures()
+    };
+
+    reportData = {
+      proposalId: pid,
+      contractAddress: $('contractAddress').value.trim(),
+      codeHash: $('codeHash').value.trim(),
+      consensusProof: consensusProof,
+      contributors: contributors,
+      contributionProofSummary: $('contributionProofSummary').value.trim(),
+      alignmentStatement: alignmentStatement,
+      signatures: signatures,
+      generatedAt: new Date().toISOString(),
+      submitterAddress: _U() || '',
+      version: '1.0',
+      reportType: 'community'
+    };
+
+    const reportJson = JSON.stringify(reportData, null, 2);
+    reportHash = '0x' + sha256(reportJson).toLowerCase();
+
+    $('reportHash').textContent = reportHash;
+    $('hashDisplay').style.display = 'block';
+    $('previewBtn').disabled = false;
+    $('submitChainBtn').disabled = false;
+
+    showSuccess('submitResult', '社区报告已生成，哈希计算完成！');
+  }
+
+  function previewReport() {
+    if (!reportHash) {
+      alert('请先生成报告');
+      return;
+    }
+
+    const qualityLabels = { excellent: '⭐ 优秀', good: '✓ 良好', average: '○ 一般', poor: '△ 较差' };
+
+    let preview = '╔══════════════════════════════════════════════════════════════════╗\n';
+    preview += '║              CreatDAO 社区审计报告                                ║\n';
+    preview += '╚══════════════════════════════════════════════════════════════════╝\n\n';
+
+    preview += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+    preview += '\n【基本信息】\n';
+    preview += '  提案 ID: ' + reportData.proposalId + '\n';
+    preview += '  合约地址: ' + (reportData.contractAddress || '未提供') + '\n';
+    preview += '  代码哈希: ' + (reportData.codeHash || '未提供') + '\n';
+    preview += '  提交者地址: ' + (reportData.submitterAddress || '未提供') + '\n';
+    preview += '  生成时间: ' + new Date(reportData.generatedAt).toLocaleString('zh-CN') + '\n';
+    preview += '  报告版本: ' + reportData.version + '\n';
+    preview += '  报告类型: 社区审计报告\n';
+
+    preview += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+    preview += '\n【一、共识投票结果证明】\n';
+    const cp = reportData.consensusProof;
+    preview += '  提案 ID: ' + cp.proposalId + '\n';
+    preview += '  投票快照区块高度: ' + cp.snapshotBlockHeight + '\n';
+    preview += '\n  投票选项分布：\n';
+    if (cp.voteOptions && cp.voteOptions.length > 0) {
+      preview += '  ┌──────────┬──────────────────────────────────────────────┬──────────┬──────────┐\n';
+      preview += '  │   选项    │                   方案哈希                    │  得票数   │   占比    │\n';
+      preview += '  ├──────────┼──────────────────────────────────────────────┼──────────┼──────────┤\n';
+      cp.voteOptions.forEach(function(opt, i) {
+        preview += '  │  选项#' + (i + 1) + '  │ ' + opt.hash.substring(0, 42) + '... │ ' + String(opt.votes).padStart(8) + ' │ ' + String(opt.pct).padStart(8) + ' │\n';
+      });
+      preview += '  └──────────┴──────────────────────────────────────────────┴──────────┴──────────┘\n';
+    } else {
+      preview += '  (无投票选项记录)\n';
+    }
+    preview += '\n  投票摘要: ' + (cp.voteSummary || '(未填写)') + '\n';
+
+    preview += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+    preview += '\n【二、贡献者名单】\n';
+    if (reportData.contributors && reportData.contributors.length > 0) {
+      preview += '  共 ' + reportData.contributors.length + ' 位贡献者\n\n';
+      reportData.contributors.forEach(function(c, i) {
+        preview += '  ' + (i + 1) + '. ' + c.address + '\n';
+        preview += '     发现内容: ' + (c.discovery_content || '(未填写)') + '\n';
+        preview += '     首次发现者: ' + (c.is_first_discoverer ? '✓ 是' : '✗ 否') + '\n';
+        preview += '     报告质量: ' + (qualityLabels[c.report_quality] || c.report_quality) + '\n';
+        preview += '     提供有效修复方案: ' + (c.has_effective_fix ? '✓ 是' : '✗ 否') + '\n';
+        if (c.has_effective_fix && c.fix_description) {
+          preview += '     修复方案描述: ' + c.fix_description + '\n';
+        }
+        preview += '     贡献度评分: ' + c.score + '/100\n\n';
+      });
+    } else {
+      preview += '  (无贡献者记录)\n';
+    }
+    preview += '  贡献度证明总结: ' + (reportData.contributionProofSummary || '(未填写)') + '\n';
+
+    preview += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+    preview += '\n【三、对齐意见书】\n';
+    const asData = reportData.alignmentStatement;
+    preview += '  总体评价: ' + (asData.overallEvaluation || '(未填写)') + '\n\n';
+    if (asData.items && asData.items.length > 0) {
+      const resultLabels = { agree: '✅ 同意', partial: '⚠️ 部分同意', disagree: '❌ 不同意' };
+      asData.items.forEach(function(item, i) {
+        preview += '  对齐项 #' + (i + 1) + ' - ' + (resultLabels[item.result] || item.result) + '\n';
+        preview += '    审计团队发现: ' + (item.finding || '(未填写)') + '\n';
+        preview += '    社区回应: ' + (item.response || '(未填写)') + '\n\n';
+      });
+    }
+    preview += '  防女巫攻击说明: ' + (asData.antiSybilDescription || '(未填写)') + '\n';
+
+    preview += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+    preview += '\n【四、签名与申领】\n';
+    const sigs = reportData.signatures;
+    preview += '  签名方式: ' + sigs.method + '\n';
+    if (sigs.signers && sigs.signers.length > 0) {
+      preview += '  签名者列表:\n';
+      sigs.signers.forEach(function(s, i) {
+        preview += '    ' + (i + 1) + '. ' + s.address + '\n';
+        preview += '       签名: ' + (s.signature ? s.signature.substring(0, 42) + '...' : '(未填写)') + '\n';
+        preview += '       时间: ' + (s.time || '(未填写)') + '\n';
+      });
+    } else {
+      preview += '  (无签名记录)\n';
+    }
+
+    preview += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+    preview += '\n【报告哈希】\n';
+    preview += '  SHA-256: ' + reportHash + '\n';
+    preview += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+    preview += '\n⚠️ 社区声明：本报告作为社区审计共识依据，支持贡献度证明和女巫攻击防护。\n';
+
+    $('reportPreview').textContent = preview;
+    $('previewCard').style.display = 'block';
+    $('previewCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function saveReportDraft() {
+    if (!reportHash) {
+      alert('请先生成报告');
+      return;
+    }
+    showPending('submitResult', '正在保存草稿...');
+    try {
+      await axios.post(BACKEND_API + '/community-report/save', {
+        proposal_id: parseInt(reportData.proposalId),
+        report_hash: reportHash,
+        submitter_address: _U() || '',
+        snapshot_block_height: String(reportData.consensusProof.snapshotBlockHeight || ''),
+        consensus_proof: JSON.stringify({
+          proposalId: reportData.consensusProof.proposalId,
+          snapshotBlockHeight: reportData.consensusProof.snapshotBlockHeight,
+          voteOptions: reportData.consensusProof.voteOptions,
+          voteSummary: reportData.consensusProof.voteSummary
+        }),
+        contributors: JSON.stringify(reportData.contributors),
+        alignment_statement: JSON.stringify(reportData.alignmentStatement),
+        signatures: JSON.stringify(reportData.signatures),
+        status: 'Draft'
+      });
+      showSuccess('submitResult', '草稿保存成功！');
+    } catch (e) {
+      showError('submitResult', '保存失败: ' + (e.response?.data?.detail || e.message));
+    }
+  }
+
+  async function signWithWallet() {
+    if (!_S()) {
+      alert('请先连接钱包');
+      return;
+    }
+    if (!reportHash) {
+      alert('请先生成报告，然后再进行签名');
+      return;
+    }
+    showPending('signResult', '请在 MetaMask 中签名...');
+    try {
+      const signer = _S();
+      const sig = await signer.signMessage(reportHash);
+      showSuccess('signResult', '签名成功！签名数据已生成。');
+
+      const addr = _U();
+      if (addr) {
+        const sigItems = document.querySelectorAll('#signaturesList .signature-item');
+        let found = false;
+        sigItems.forEach(function(item) {
+          const existingAddr = item.querySelector('.sig-addr')?.value?.trim() || '';
+          if (existingAddr.toLowerCase() === addr.toLowerCase()) {
+            item.querySelector('.sig-data').value = sig;
+            item.querySelector('.sig-time').value = new Date().toISOString().slice(0, 16);
+            found = true;
+          }
+        });
+        if (!found && sigItems.length === 1) {
+          const firstAddr = sigItems[0].querySelector('.sig-addr')?.value?.trim() || '';
+          if (!firstAddr) {
+            sigItems[0].querySelector('.sig-addr').value = addr;
+            sigItems[0].querySelector('.sig-data').value = sig;
+            sigItems[0].querySelector('.sig-time').value = new Date().toISOString().slice(0, 16);
+          } else {
+            addSignatureInternal(addr, sig, new Date().toISOString().slice(0, 16));
+          }
+        }
+      }
+    } catch (e) {
+      if (e.code === 4001 || (e.message && e.message.toLowerCase().includes('user rejected'))) {
+        showError('signResult', '已取消签名');
+      } else {
+        showError('signResult', '签名失败: ' + (e.reason || e.message || String(e)));
+      }
+    }
+  }
+
+  async function submitReportToChain() {
+    if (!reportHash) {
+      alert('请先生成报告');
+      return;
+    }
+    const proposalId = parseInt(reportData.proposalId);
+    if (!proposalId || proposalId <= 0) {
+      alert('提案 ID 无效');
+      return;
+    }
+
+    if (!_S()) {
+      alert('请先连接钱包');
+      return;
+    }
+
+    const confirmSubmit = confirm('确认提交社区审计报告到提案 #' + proposalId + ' 吗？\n\n报告哈希: ' + reportHash + '\n\n提交后将作为社区方案参与投票。');
+    if (!confirmSubmit) return;
+
+    try {
+      showPending('submitResult', '正在提交社区方案到链上...');
+      const tx = await _A().submitCommunityProposal(proposalId, reportHash, { gasLimit: 500000 });
+      await tx.wait();
+
+      await axios.post(BACKEND_API + '/community-report/save', {
+        proposal_id: proposalId,
+        report_hash: reportHash,
+        submitter_address: _U() || '',
+        snapshot_block_height: String(reportData.consensusProof.snapshotBlockHeight || ''),
+        consensus_proof: JSON.stringify({
+          proposalId: reportData.consensusProof.proposalId,
+          snapshotBlockHeight: reportData.consensusProof.snapshotBlockHeight,
+          voteOptions: reportData.consensusProof.voteOptions,
+          voteSummary: reportData.consensusProof.voteSummary
+        }),
+        contributors: JSON.stringify(reportData.contributors),
+        alignment_statement: JSON.stringify(reportData.alignmentStatement),
+        signatures: JSON.stringify(reportData.signatures),
+        status: 'Submitted'
+      });
+
+      showSuccess('submitResult', '社区方案提交成功！提案 ID: ' + proposalId + ' | 交易哈希: ' + tx.hash);
+
+      setTimeout(function() {
+        if (confirm('提交成功！是否返回用户端？')) {
+          window.location.href = 'dashboard.html';
+        }
+      }, 500);
+    } catch (e) {
+      if (e.code === 4001 || (e.message && e.message.toLowerCase().includes('user rejected'))) {
+        showError('submitResult', '已取消操作');
+      } else {
+        showContractError('submitResult', e);
+      }
+    }
+  }
+
+  function fillSample() {
+    $('contractAddress').value = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+    $('consensusProposalId').value = $('proposalId').value || '1';
+    $('snapshotBlockHeight').value = '6789012';
+
+    var voteList = $('voteOptionsList');
+    voteList.innerHTML = '';
+    [
+      { hash: '0xa1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2', votes: 1250, pct: '42.3%' },
+      { hash: '0xf1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4', votes: 890, pct: '30.1%' },
+      { hash: '0x9876abcdef1234567890abcdef1234567890abcdef1234567890abcdef123456', votes: 520, pct: '17.6%' }
+    ].forEach(function(opt) {
+      addVoteOptionInternal(opt.hash, opt.votes, opt.pct);
+    });
+    $('voteSummary').value = '投票于区块高度 6789012 进行快照。共计 2960 票参与投票，覆盖 85% 的活跃质押者。投票过程在链上公开透明，所有交易哈希可通过 Sepolia 区块浏览器验证。';
+
+    var contribList = $('contributorsList');
+    contribList.innerHTML = '';
+    [{
+      addr: '0x1234567890abcdef1234567890abcdef12345678',
+      disc: '发现 transferOwnership 函数未校验零地址，存在所有权永久丢失风险',
+      first: true, quality: 'excellent', fix: true,
+      fixdesc: '添加 require(newOwner != address(0)) 校验',
+      score: 95
+    }, {
+      addr: '0xabcdef1234567890abcdef1234567890abcdef12',
+      disc: '发现 withdraw 函数存在整数下溢风险，建议使用 SafeMath 或先校验余额',
+      first: true, quality: 'good', fix: true,
+      fixdesc: '引入 SafeMath 库进行安全的数学运算',
+      score: 85
+    }, {
+      addr: '0x7890abcdef1234567890abcdef1234567890abcd',
+      disc: '发现管理员权限过度集中，建议引入多签机制和时间锁',
+      first: false, quality: 'good', fix: false,
+      fixdesc: '',
+      score: 60
+    }].forEach(function(c) {
+      addContributorInternal(c.addr, c.disc, c.first, c.quality, c.fix, c.fixdesc, c.score);
+    });
+    $('contributionProofSummary').value = '共计 3 位贡献者参与本提案的社区审计。其中 2 位为首次发现者，贡献度显著。所有贡献者地址均通过质押门槛验证（≥600 CEAT），确保不存在女巫攻击。贡献度评分综合考虑了发现的重要性、是否为首次发现、报告质量和是否提供有效修复方案四个维度。';
+
+    var alignList = $('alignmentItemsList');
+    alignList.innerHTML = '';
+    [{
+      finding: '审计团队认为 deposit 函数的权限检查存在缺陷',
+      response: '社区同意审计团队的结论，但进一步建议增加 reentrancyGuard 防护。社区验证了 onlyOwner 修饰器在 Solidity 0.8.20 版本下的行为完全正确，建议增加额外的安全层。',
+      result: 'partial'
+    }, {
+      finding: '审计团队建议添加紧急暂停机制',
+      response: '完全同意审计团队的建议。社区已实现 Pausable 继承方案并提供测试用例验证了暂停/恢复功能在 deposit、withdraw、transfer 三个核心函数上的正确性。',
+      result: 'agree'
+    }].forEach(function(item) {
+      addAlignmentItemInternal(item.finding, item.response, item.result);
+    });
+    $('overallEvaluation').value = '社区整体认可审计团队的审计方法和结论。审计团队的审查覆盖了所有权管理、数值运算安全和权限控制等关键领域，方法科学合理。社区在此基础上补充了贡献度评估和防女巫攻击机制，以确保后续代币奖励分配的公平性。';
+    $('antiSybilDescription').value = '本报告采用以下机制防止女巫攻击：1) 所有贡献者需通过 ≥600 CEAT 质押门槛验证，增加攻击成本；2) 地址聚类分析，排除短时间内大量注册的相似地址；3) 行为模式检测，排除仅参与但不产生实质贡献的地址；4) 链上身份关联分析，排除已知的 Sybil 攻击地址集群。';
+
+    var sigList = $('signaturesList');
+    sigList.innerHTML = '';
+    $('signatureMethod').value = 'multisig';
+    addSignatureInternal('0x1111222233334444555566667777888899990000', '', '2025-03-15T10:30');
+    addSignatureInternal('0xaaaabbbbccccddddeeeeffff1111222233334444', '', '2025-03-15T11:00');
+
+    showSuccess('submitResult', '样例已填充，请根据实际情况修改！');
+  }
+
+  Wallet.registerEvents();
+  Wallet.autoConnect();
+</script>
+</body>
+</html>

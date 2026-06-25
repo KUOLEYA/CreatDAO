@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CreatDAO - 审计 DAO 操作平台</title>
+  <link rel="stylesheet" href="common.css?v=2">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+      min-height: 100vh;
+      color: #e0e0e0;
+      padding: 20px;
+    }
+    .app-container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .header {
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 24px 28px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .logo {
+      width: 52px; height: 52px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; font-weight: 700; color: #fff;
+      box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+    }
+    .title h1 { font-size: 22px; font-weight: 700; color: #fff; letter-spacing: 0.5px; }
+    .title span { font-size: 13px; color: rgba(255,255,255,0.45); }
+    .panel-header {
+      text-align: center;
+      padding: 32px 20px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.05);
+      margin-bottom: 24px;
+    }
+    .panel-header h1 { font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+    .panel-header p { font-size: 15px; color: rgba(255,255,255,0.4); }
+    .panel-header .divider {
+      width: 60px;
+      height: 3px;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      border-radius: 2px;
+      margin: 16px auto 0;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.85);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-title::before {
+      content: '';
+      width: 4px;
+      height: 20px;
+      background: linear-gradient(180deg, #667eea, #764ba2);
+      border-radius: 2px;
+    }
+
+    .module-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .module-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px;
+      padding: 24px;
+      text-decoration: none;
+      color: inherit;
+      transition: all 0.25s ease;
+      backdrop-filter: blur(10px);
+      position: relative;
+      overflow: hidden;
+    }
+    .module-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+    .module-card:hover {
+      border-color: rgba(255,255,255,0.15);
+      transform: translateY(-3px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+    .module-card:hover::before {
+      opacity: 1;
+    }
+    .module-icon {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px;
+      margin-bottom: 16px;
+    }
+    .module-icon.purple { background: rgba(102,126,234,0.18); }
+    .module-icon.green { background: rgba(76,175,80,0.18); }
+    .module-icon.orange { background: rgba(255,152,0,0.18); }
+    .module-icon.cyan { background: rgba(0,188,212,0.18); }
+    .module-icon.red { background: rgba(229,57,53,0.18); }
+    .module-icon.pink { background: rgba(233,30,99,0.18); }
+    .module-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.95);
+      margin-bottom: 6px;
+    }
+    .module-desc {
+      font-size: 13px;
+      color: rgba(255,255,255,0.4);
+      line-height: 1.5;
+    }
+    .module-arrow {
+      position: absolute;
+      right: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 20px;
+      color: rgba(255,255,255,0.2);
+      transition: all 0.25s;
+    }
+    .module-card:hover .module-arrow {
+      color: rgba(255,255,255,0.5);
+      transform: translateY(-50%) translateX(3px);
+    }
+
+    .features-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .feature-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .feature-icon {
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      background: rgba(102,126,234,0.15);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    .feature-content h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    .feature-content p {
+      font-size: 12px;
+      color: rgba(255,255,255,0.4);
+      line-height: 1.4;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 20px;
+      color: rgba(255,255,255,0.3);
+      font-size: 12px;
+    }
+
+    @media (max-width: 700px) {
+      body { padding: 12px; }
+      .header { padding: 16px; flex-direction: column; align-items: stretch; }
+      .module-grid { grid-template-columns: 1fr; }
+      .features-row { grid-template-columns: 1fr; }
+    }
+  </style>
+  <style>
+    .module-card .module-badge { position: absolute; top: 12px; right: 40px; font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600; letter-spacing: 0.3px; }
+    .module-badge.core { background: rgba(102,126,234,0.15); color: #9fa8da; }
+    .module-badge.tool { background: rgba(255,152,0,0.15); color: #ffcc80; }
+    .features-row { gap: 16px; }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+
+    <header class="header">
+      <div class="header-left">
+        <div class="logo">📊</div>
+        <div class="title">
+          <h1>CreatDAO</h1>
+          <span>审计 DAO 操作平台</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="panel-header">
+      <h1>欢迎使用 CreatDAO</h1>
+      <p>去中心化智能合约安全审计与治理平台</p>
+      <div class="divider"></div>
+    </div>
+
+    <div class="section-title">核心功能模块</div>
+    <div class="module-grid">
+      <a class="module-card" href="dashboard.html">
+        <div class="module-icon purple">🏠</div>
+        <div class="module-title">用户端</div>
+        <div class="module-desc">质押 CEAT 代币，提交审计并参与社区投票</div>
+        <div class="module-arrow">→</div>
+      </a>
+      <a class="module-card" href="audit-team.html">
+        <div class="module-icon green">🔍</div>
+        <div class="module-title">审计团队端</div>
+        <div class="module-desc">接取提案并进行专业代码审计，提交审计报告</div>
+        <div class="module-arrow">→</div>
+      </a>
+      <a class="module-card" href="admin.html">
+        <div class="module-icon orange">⚙️</div>
+        <div class="module-title">管理端</div>
+        <div class="module-desc">合约配置、权限管理与系统参数设置</div>
+        <div class="module-arrow">→</div>
+      </a>
+      <a class="module-card" href="dispute-committee.html">
+        <div class="module-icon cyan">⚖️</div>
+        <div class="module-title">争议委员会</div>
+        <div class="module-desc">处理审计争议，行使否决权进行最终裁决</div>
+        <div class="module-arrow">→</div>
+      </a>
+    </div>
+
+    <div class="section-title">审计工具</div>
+    <div class="module-grid">
+      <a class="module-card" href="pricing.html">
+        <div class="module-icon orange">💰</div>
+        <div class="module-title">审计定价</div>
+        <div class="module-desc">选择服务档位，计算审计费用并创建订单</div>
+        <div class="module-arrow">→</div>
+      </a>
+      <a class="module-card" href="ai-review.html">
+        <div class="module-icon pink">🤖</div>
+        <div class="module-title">提交审计</div>
+        <div class="module-desc">自动化智能合约安全快速筛查</div>
+        <div class="module-arrow">→</div>
+      </a>
+      <a class="module-card" href="audit-report-query.html">
+        <div class="module-icon purple">📋</div>
+        <div class="module-title">查询审计报告</div>
+        <div class="module-desc">查询完整的审计报告内容与历史记录</div>
+        <div class="module-arrow">→</div>
+      </a>
+      <a class="module-card" href="community-report-writing.html">
+        <div class="module-icon green">📝</div>
+        <div class="module-title">社区审计报告编写</div>
+        <div class="module-desc">编写社区审计报告，提交贡献度证明和防女巫攻击机制</div>
+        <div class="module-arrow">→</div>
+      </a>
+    </div>
+
+    <div class="section-title">平台特性</div>
+    <div class="features-row">
+      <div class="feature-card">
+        <div class="feature-icon">🔐</div>
+        <div class="feature-content">
+          <h3>去中心化审计</h3>
+          <p>多方参与的审计机制，确保公平透明</p>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📈</div>
+        <div class="feature-content">
+          <h3>社区治理</h3>
+          <p>代币质押与投票机制，民主决策</p>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🛡️</div>
+        <div class="feature-content">
+          <h3>安全否决权</h3>
+          <p>争议委员会终极安全阀机制</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>CreatDAO © 2024 | 审计 DAO 操作平台</p>
+    </div>
+
+  </div>
+</body>
+</html>

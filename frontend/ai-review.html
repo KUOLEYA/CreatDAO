@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CreatDAO - 提交审计</title>
+  <link rel="stylesheet" href="common.css?v=2">
+  <script src="lib/ethers.min.js?v=2"></script>
+  <script src="lib/axios.min.js?v=2"></script>
+  <script src="lib/sha256.min.js?v=2"></script>
+  <script src="common.js?v=2"></script>
+  <script src="config.js?v=4"></script>
+  <script src="contract.js?v=6"></script>
+  <script src="wallet.js?v=3"></script>
+  <style>
+.inp-date {
+  padding: 11px 14px; border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px; font-size: 14px;
+  background: rgba(0,0,0,0.28);
+  color: #e8e8e8;
+  transition: all 0.2s ease;
+  outline: none;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  flex: 1; min-width: 200px;
+}
+.inp-date:focus {
+  border-color: rgba(102,126,234,0.5);
+  box-shadow: 0 0 0 3px rgba(102,126,234,0.12);
+  background: rgba(0,0,0,0.32);
+}
+.inp-date::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
+}
+.checkbox-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.checkbox-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: #667eea; cursor: pointer; flex-shrink: 0; }
+.checkbox-row label { font-size: 14px; color: #e0e0e0; cursor: pointer; }
+.hint-text { font-size: 12px; color: rgba(255,255,255,0.35); margin-top: 4px; margin-left: 4px; }
+.file-upload {
+  border: 2px dashed rgba(102,126,234,0.5);
+  border-radius: 12px; padding: 30px;
+  text-align: center; cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(0,0,0,0.15);
+}
+.file-upload:hover { border-color: rgba(102,126,234,0.8); background: rgba(0,0,0,0.25); }
+.file-upload.dragover { border-color: #667eea; background: rgba(102,126,234,0.1); }
+.file-upload .upload-icon { font-size: 40px; margin-bottom: 10px; }
+.file-upload .upload-text { font-size: 14px; color: rgba(255,255,255,0.6); }
+.file-upload input[type="file"] { display: none; }
+.report-card { background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; margin-top: 12px; }
+.report-card .report-title { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; gap: 10px; }
+.report-card .report-section { margin-bottom: 16px; }
+.report-card .section-label { font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+.report-card .section-value { font-size: 14px; color: #e0e0e0; line-height: 1.5; }
+.finding-item { background: rgba(255,255,255,0.03); border-radius: 10px; padding: 16px; margin-bottom: 12px; border-left: 4px solid; }
+.finding-item.critical { border-left-color: #ef5350; background: rgba(229,57,53,0.08); }
+.finding-item.high { border-left-color: #ef5350; background: rgba(229,57,53,0.06); }
+.finding-item.medium { border-left-color: #ff9800; background: rgba(255,152,0,0.06); }
+.finding-item.low { border-left-color: #4caf50; background: rgba(76,175,80,0.06); }
+.finding-item.info { border-left-color: #2196f3; background: rgba(33,150,243,0.06); }
+.finding-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+.finding-id { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 14px; font-weight: 700; color: #fff; }
+.finding-severity { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.finding-severity.critical { background: rgba(229,57,53,0.2); color: #ef9a9a; }
+.finding-severity.high { background: rgba(229,57,53,0.2); color: #ef9a9a; }
+.finding-severity.medium { background: rgba(255,152,0,0.2); color: #ffcc80; }
+.finding-severity.low { background: rgba(76,175,80,0.2); color: #81c784; }
+.finding-severity.info { background: rgba(33,150,243,0.2); color: #90caf9; }
+.finding-location { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 8px; }
+.finding-description { font-size: 13px; color: rgba(255,255,255,0.85); line-height: 1.6; }
+.status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 24px; font-size: 14px; font-weight: 600; }
+.status-badge.blocked { background: rgba(229,57,53,0.2); color: #ef9a9a; border: 1px solid rgba(229,57,53,0.3); }
+.status-badge.allowed { background: rgba(76,175,80,0.2); color: #81c784; border: 1px solid rgba(76,175,80,0.3); }
+.review-section { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 14px; padding: 20px; margin-bottom: 14px; transition: all 0.3s ease; }
+.upload-area { border: 2px dashed rgba(255,255,255,0.1); border-radius: 14px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.3s ease; }
+.upload-area:hover { border-color: rgba(102,126,234,0.4); background: rgba(102,126,234,0.05); }
+.result-block { background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 16px; font-family: 'SF Mono','Fira Code',monospace; font-size: 12px; line-height: 1.6; max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; color: rgba(255,255,255,0.7); }
+.risk-tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.risk-tag.low { background: rgba(76,175,80,0.12); color: #81c784; }
+.risk-tag.medium { background: rgba(255,152,0,0.12); color: #ffcc80; }
+.risk-tag.high { background: rgba(229,57,53,0.12); color: #ef9a9a; }
+.risk-tag.critical { background: rgba(183,28,28,0.2); color: #ff5252; }
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.btn-group { display: flex; gap: 12px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+<div class="app-container">
+
+  <!-- ========== HEADER ========== -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">AI</div>
+      <div class="title">
+        <h1>CreatDAO - 提交审计</h1>
+        <span>智能合约安全快速筛查 · 选择服务层级</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-outline btn-sm" id="walletBtn" onclick="handleWalletClick()" style="color:#81c784;">🔌 连接钱包</button>
+      <button class="btn btn-outline" onclick="window.location.href='home.html'">返回主页面</button>
+    </div>
+  </header>
+
+  <!-- ========== PANEL HEADER ========== -->
+  <div class="panel-header">
+    <h1>提交审计</h1>
+    <p>配置审计参数 → 上传代码 → AI 筛查 → 生成提案</p>
+  </div>
+
+  <!-- ========== PRICING SUMMARY ========== -->
+  <div class="card" id="pricingCard">
+    <div class="card-header">
+      <div class="card-icon purple">💰</div>
+      <div>
+        <div class="card-title">审计费用</div>
+        <div class="card-desc">AI + 社区去中心化审核 · 灵活配置审计参数</div>
+      </div>
+    </div>
+    <div class="card-body">
+
+      <div class="form-row">
+        <label>预估代码行数</label>
+        <input id="pricingCodeLines" class="inp inp-num" type="number" placeholder="行数" min="100" step="100" value="1000" onchange="updatePricingSummary()">
+        <label>合约复杂度</label>
+        <select id="complexitySelect" class="inp" style="min-width:140px;" onchange="updatePricingSummary()">
+          <option value="simple">简单 ×0.7</option>
+          <option value="moderate" selected>中等 ×1.0</option>
+          <option value="complex">复杂 ×1.5</option>
+          <option value="highly_complex">高度复杂 ×2.0</option>
+        </select>
+        <label>资产池规模</label>
+        <select id="assetPoolSelect" class="inp" style="min-width:120px;" onchange="updatePricingSummary()">
+          <option value="micro">微型</option>
+          <option value="small" selected>小型</option>
+          <option value="medium">中型</option>
+          <option value="large">大型</option>
+          <option value="extra_large">超大型</option>
+        </select>
+      </div>
+
+      <div id="pricingSummaryBox" style="padding:16px;background:rgba(102,126,234,0.08);border-radius:12px;border:1px solid rgba(102,126,234,0.15);display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:4px;">预估审计费用</div>
+          <div style="font-size:28px;font-weight:800;background:linear-gradient(135deg,#667eea,#764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;" id="pricingEstimate">--</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.35);" id="pricingSubtitle">中等复杂度 · 小型资产池 · 1000行</div>
+          <div style="font-size:13px;color:#81c784;margin-top:4px;display:none;" id="ceatEquivalent"></div>
+        </div>
+        <div>
+          <div style="text-align:center;padding:8px 12px;">
+            <span style="font-size:13px;color:#81c784;">💎 仅支持 CEAT 代币支付 (85折)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row" style="margin-top:8px;">
+        <div class="checkbox-row" style="padding:8px 12px;">
+          <input type="checkbox" id="pricingNeedBounty" onchange="updatePricingSummary()">
+          <label for="pricingNeedBounty" style="font-size:13px;">🏆 附加赏金池 (吸引更多白帽子参与)</label>
+        </div>
+      </div>
+      <div id="bountyInputArea" style="display:none;margin-top:8px;">
+        <input id="pricingBountyAmount" class="inp inp-wide" type="number" placeholder="赏金池金额 (USD)" min="0" step="100" value="5000" onchange="updatePricingSummary()">
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-outline btn-sm" onclick="queryPaymentStatus()">
+          <span>📋</span> 查看支付凭证
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== UPLOAD CARD ========== -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">📤</div>
+      <div>
+        <div class="card-title">上传智能合约代码</div>
+        <div class="card-desc">上传代码文件进行 AI 安全审计</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row full-width">
+        <label>代码文件（支持 .sol、.zip、.tar.gz）</label>
+        <div class="file-upload" id="fileUpload">
+          <div class="upload-icon">📁</div>
+          <div class="upload-text">点击或拖拽文件到此处上传</div>
+          <input type="file" id="fileInput" multiple accept=".sol,.zip,.tar.gz">
+        </div>
+        <div id="fileList" style="margin-top: 12px; display: none;">
+          <div style="font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 8px;">已选择文件：</div>
+          <div id="fileItems"></div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>合约地址（可选）</label>
+        <input id="contractAddress" class="inp inp-wide" type="text" placeholder="0x...">
+      </div>
+
+      <div class="form-row">
+        <label>项目名称</label>
+        <input id="projectName" class="inp inp-wide" type="text" placeholder="项目名称">
+      </div>
+
+      <div class="form-row full-width">
+        <label>业务逻辑简述</label>
+        <textarea id="businessLogic" class="inp inp-textarea" placeholder="描述合约的业务逻辑..."></textarea>
+      </div>
+
+      <div class="form-row full-width">
+        <label>审计范围</label>
+        <textarea id="auditScope" class="inp inp-textarea" placeholder="描述审计范围..."></textarea>
+      </div>
+
+      <div class="form-row full-width">
+        <label>已知风险自述（可选）</label>
+        <textarea id="knownRisks" class="inp inp-textarea" placeholder="描述已知风险..."></textarea>
+      </div>
+
+      <div class="form-row">
+        <label>联系方式</label>
+        <input id="contact" class="inp inp-wide" type="text" placeholder="邮箱或其它联系方式">
+      </div>
+
+      <div class="form-row">
+        <label>期望完成时间</label>
+        <input id="expectedCompletionDate" class="inp-date" type="date">
+      </div>
+
+      <div class="form-row full-width">
+        <label>期望完成天数</label>
+        <input id="maxCompletionDays" class="inp inp-wide" type="number" placeholder="请输入天数" min="5">
+        <div class="hint-text">💡 建议至少填写 5 天以上，以便审计团队有充足时间完成审计工作</div>
+      </div>
+
+      <div class="form-row full-width">
+        <div class="checkbox-row">
+          <input type="checkbox" id="needTaskReward">
+          <label for="needTaskReward">是否需要附加任务奖励用来加快审计进度</label>
+        </div>
+      </div>
+
+      <div class="form-row" style="margin-top: 10px;">
+        <button class="btn btn-success" onclick="submitAudit()" id="submitBtn" disabled>提交 AI 审计</button>
+        <button class="btn btn-outline" onclick="fillTestProposal()">填写测试提案</button>
+      </div>
+
+      <div id="uploadResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- ========== REPORT CARD (hidden by default) ========== -->
+  <div class="card" id="reportCard" style="display: none;">
+    <div class="card-header">
+      <div class="card-icon green">📊</div>
+      <div>
+        <div class="card-title">审计方案报告</div>
+        <div class="card-desc">自动化安全审计结果</div>
+      </div>
+    </div>
+    <div class="card-body" id="reportBody">
+      <!-- Report will be populated here -->
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const BACKEND_API = CONFIG.API_BASE;
+  let selectedFiles = [];
+  let currentComplexity = 'moderate';
+  let currentAssetPool = 'small';
+  let currentCodeLines = 1000;
+  let currentPricing = null;
+  let currentOrderId = null;
+  async function connectWallet() {
+    if (!window.ethereum) {
+      showError('uploadResult', '请安装 MetaMask 钱包');
+      return null;
+    }
+    try {
+      await Wallet.connect();
+      return Wallet.getAddress();
+    } catch (e) {
+      console.error('Wallet connect failed:', e);
+      showError('uploadResult', '钱包连接失败');
+      return null;
+    }
+  }
+
+  async function handleWalletClick() {
+    const btn = document.getElementById('walletBtn');
+    if (Wallet.getAddress()) {
+      Wallet.disconnect();
+      btn.textContent = '🔌 连接钱包';
+      btn.style.color = '#81c784';
+      showInfo('uploadResult', '钱包已断开');
+    } else {
+      btn.disabled = true;
+      btn.textContent = '⏳ 连接中...';
+      btn.style.color = '#ffb74d';
+      try {
+        const addr = await connectWallet();
+        if (addr) {
+          btn.textContent = '🟢 ' + getShortAddr(addr);
+          btn.style.color = '#81c784';
+          showSuccess('uploadResult', '钱包已连接: ' + getShortAddr(addr));
+        } else {
+          btn.textContent = '🔌 连接钱包';
+          btn.style.color = '#81c784';
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  }
+
+  function getSelectedComplexity() {
+    return document.getElementById('complexitySelect').value;
+  }
+
+  function getSelectedAssetPool() {
+    return document.getElementById('assetPoolSelect').value;
+  }
+
+  async function updatePricingSummary() {
+    currentComplexity = getSelectedComplexity();
+    currentAssetPool = getSelectedAssetPool();
+    currentCodeLines = parseInt(document.getElementById('pricingCodeLines').value) || 1000;
+
+    const needBounty = document.getElementById('pricingNeedBounty').checked;
+    const bountyAmount = parseFloat(document.getElementById('pricingBountyAmount').value) || 0;
+    const payWithToken = true;
+
+    document.getElementById('bountyInputArea').style.display = needBounty ? 'block' : 'none';
+
+    const complexityLabels = { simple: '简单', moderate: '中等', complex: '复杂', highly_complex: '高度复杂' };
+    const assetLabels = { micro: '微型', small: '小型', medium: '中型', large: '大型', extra_large: '超大型' };
+    document.getElementById('pricingSubtitle').textContent =
+      `${complexityLabels[currentComplexity] || currentComplexity} · ${assetLabels[currentAssetPool] || currentAssetPool} · ${currentCodeLines.toLocaleString()}行`;
+
+    try {
+      const res = await axios.post(`${BACKEND_API}/pricing/calculate`, {
+        tier: 'standard', complexity: currentComplexity, asset_pool_size: currentAssetPool,
+        code_lines: currentCodeLines,
+        need_bounty: needBounty,
+        bounty_amount: bountyAmount,
+        pay_with_token: payWithToken
+      });
+      currentPricing = res.data;
+
+      const total = currentPricing.total_after_discount || currentPricing.final_payable;
+      document.getElementById('pricingEstimate').textContent = '$' + total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+      const ceatEl = document.getElementById('ceatEquivalent');
+      if (ceatEl) {
+        if (payWithToken && total > 0) {
+          const CEAT_PRICE = 0.05;
+          const ceatAmount = Math.ceil(total / CEAT_PRICE);
+          ceatEl.style.display = 'block';
+          ceatEl.textContent = `≈ ${ceatAmount.toLocaleString()} CEAT (1 CEAT = $${CEAT_PRICE})`;
+        } else {
+          ceatEl.style.display = 'none';
+        }
+      }
+    } catch (e) {
+      console.error('Pricing update failed:', e);
+    }
+  }
+
+  // File upload handling
+  const fileUpload = $('fileUpload');
+  const fileInput = $('fileInput');
+
+  fileUpload.addEventListener('click', () => fileInput.click());
+
+  fileUpload.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    fileUpload.classList.add('dragover');
+  });
+
+  fileUpload.addEventListener('dragleave', () => {
+    fileUpload.classList.remove('dragover');
+  });
+
+  fileUpload.addEventListener('drop', (e) => {
+    e.preventDefault();
+    fileUpload.classList.remove('dragover');
+    handleFiles(e.dataTransfer.files);
+  });
+
+  fileInput.addEventListener('change', (e) => {
+    handleFiles(e.target.files);
+  });
+
+  function handleFiles(files) {
+    selectedFiles = Array.from(files);
+    updateFileList();
+  }
+
+  function updateFileList() {
+    if (selectedFiles.length === 0) {
+      $('fileList').style.display = 'none';
+      $('submitBtn').disabled = true;
+      return;
+    }
+
+    $('fileList').style.display = 'block';
+    const fileItems = $('fileItems');
+    fileItems.innerHTML = selectedFiles.map((file, index) => {
+      return `
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 16px;">📄</span>
+            <span style="font-size: 13px; color: #e0e0e0;">${file.name}</span>
+            <span style="font-size: 12px; color: rgba(255,255,255,0.4);">(${formatFileSize(file.size)})</span>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="removeFile(${index})">×</button>
+        </div>
+      `;
+    }).join('');
+
+    $('submitBtn').disabled = false;
+  }
+
+  function removeFile(index) {
+    selectedFiles.splice(index, 1);
+    updateFileList();
+  }
+
+  updatePricingSummary();
+
+  function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  function concatenateFiles(files) {
+    return new Promise((resolve, reject) => {
+      const contents = [];
+      let processed = 0;
+
+      files.forEach((file, index) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          contents.push(`// ===== ${file.name} =====\n` + e.target.result);
+          processed++;
+          if (processed === files.length) {
+            resolve(contents.join('\n\n'));
+          }
+        };
+        reader.onerror = reject;
+        reader.readAsText(file);
+      });
+    });
+  }
+
+  async function submitAudit() {
+    showPending('uploadResult', '正在创建订单并提交 AI 审核，请稍候...');
+
+    const payWithToken = true;
+
+    if (payWithToken && !Wallet.getAddress()) {
+      showPending('uploadResult', '正在连接钱包...');
+      const addr = await connectWallet();
+      if (!addr) {
+        showError('uploadResult', '代币支付需要连接钱包，请在 MetaMask 中授权');
+        return;
+      }
+    }
+
+    try {
+      const orderRes = await axios.post(`${BACKEND_API}/pricing/orders`, {
+        tier: 'standard',
+        project_name: $('projectName').value || 'Unnamed Project',
+        complexity: currentComplexity,
+        asset_pool_size: currentAssetPool,
+        code_lines: currentCodeLines,
+        contract_count: selectedFiles.length || 1,
+        need_bounty: document.getElementById('pricingNeedBounty').checked,
+        bounty_amount: parseFloat(document.getElementById('pricingBountyAmount').value) || 0,
+        has_dispute: false,
+        pay_with_token: payWithToken,
+        wallet_address: Wallet.getAddress() || $('contact').value || '',
+        description: $('businessLogic').value || '',
+        contact: $('contact').value || '',
+      });
+
+      currentOrderId = orderRes.data.order_id;
+
+      const formData = new FormData();
+      selectedFiles.forEach(file => {
+        formData.append('files', file);
+      });
+
+      formData.append('project_name', $('projectName').value || 'Unnamed Project');
+      formData.append('business_logic', $('businessLogic').value || '');
+      formData.append('privilege_info', '');
+      formData.append('audit_scope', $('auditScope').value || 'Full audit');
+      formData.append('known_risks', $('knownRisks').value || '');
+      formData.append('audit_purpose', 'AI Preliminary Screening');
+      formData.append('contact', $('contact').value || '');
+      formData.append('contract_address', $('contractAddress').value || '');
+      formData.append('expected_completion_date', $('expectedCompletionDate').value || '');
+      formData.append('max_completion_days', $('maxCompletionDays').value || '');
+      formData.append('need_task_reward', $('needTaskReward').checked ? 'true' : 'false');
+      formData.append('order_id', currentOrderId);
+
+      const response = await axios.post(BACKEND_API + '/audit/submit', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      showSuccess('uploadResult', 'AI 审核完成！订单号: ' + currentOrderId);
+
+      currentReportData = response.data;
+      displayReport(response.data);
+    } catch (e) {
+      const errorMsg = e.response?.data?.detail || e.message || '提交失败';
+      showError('uploadResult', errorMsg);
+      console.error(e);
+    }
+  }
+
+  function displayReport(report, projectInfo = {}) {
+    const reportCard = $('reportCard');
+    const reportBody = $('reportBody');
+    
+    // Extract report metadata
+    const taskInfo = report.task_info || {};
+    const executionSummary = report.execution_summary || {};
+    const finalVerdict = report.final_verdict || {};
+    
+    const findings = report.findings || [];
+    const hasCritical = findings.some(f => f.severity === '高危' || f.severity === 'critical' || f.severity === 'Critical');
+    const hasHigh = findings.some(f => f.severity === '高危' || f.severity === 'high' || f.severity === 'High');
+    const isBlocked = hasCritical || hasHigh;
+
+    let html = `
+      <div class="report-card">
+        <div class="report-title">
+          一、审计方案报告
+          <span class="status-badge ${isBlocked ? 'blocked' : 'allowed'}">${isBlocked ? '🚫 存在高危漏洞' : '📊 审计完成'}</span>
+        </div>
+
+        <div class="report-section">
+          <div class="section-label">审计对象标识</div>
+          <div class="section-value">
+            <div style="margin-bottom: 8px;"><strong>合约地址：</strong>${projectInfo.contractAddress || $('contractAddress').value || '未提供'}</div>
+            <div style="margin-bottom: 8px;"><strong>代码哈希：</strong><code style="font-family: monospace;">${taskInfo.code_hash || '未计算'}</code></div>
+            <div><strong>项目名称：</strong>${projectInfo.projectName || $('projectName').value || '未命名项目'}</div>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="section-label">自动化检测摘要</div>
+          <div class="section-value">
+            <div style="margin-bottom: 6px;"><strong>AI 模型：</strong>${executionSummary.ai_engine || 'DeepSeek-V4 / SecAI-v3'}</div>
+            <div style="margin-bottom: 6px;"><strong>检测工具：</strong>${executionSummary.tools || 'DeepSeek AI 静态分析引擎'}</div>
+            <div style="margin-bottom: 6px;"><strong>覆盖范围：</strong>${executionSummary.coverage || 'SWC-101 至 SWC-136 标准漏洞库'}</div>
+            <div><strong>检测时间：</strong>${executionSummary.timestamp ? new Date(executionSummary.timestamp).toLocaleString() : new Date().toLocaleString()}</div>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="section-label">漏洞发现列表（${findings.length} 个）</div>
+          <div class="section-value">
+            ${findings.length === 0 ? '<div style="padding: 20px; text-align: center; color: rgba(255,255,255,0.5);">未发现漏洞</div>' : findings.map((finding, idx) => {
+              const severity = (finding.severity || 'info').toLowerCase();
+              const severityClass = severity.includes('高') || severity === 'critical' || severity === 'high' ? 'high' : 
+                                   severity.includes('中') || severity === 'medium' ? 'medium' : 
+                                   severity.includes('低') || severity === 'low' ? 'low' : 'info';
+              
+              return `
+                <div class="finding-item ${severityClass}">
+                  <div class="finding-header">
+                    <span class="finding-id">${finding.id || 'AI-' + String(idx + 1).padStart(3, '0')}</span>
+                    <span class="finding-severity ${severityClass}">${finding.severity || '信息提示'}</span>
+                  </div>
+                  <div class="finding-location">
+                    📍 ${finding.location || '未指定位置'}
+                  </div>
+                  <div class="finding-description">
+                    <strong>类型：</strong>${finding.vuln_type || finding.type || '未分类'}<br>
+                    <strong>描述：</strong>${finding.description || finding.details || '无详细描述'}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="section-label">审计结论</div>
+          <div class="section-value">
+            ${isBlocked ? `
+            <div style="background: rgba(229,57,53,0.12); border: 1px solid rgba(229,57,53,0.25); border-radius: 10px; padding: 16px; margin-bottom: 12px;">
+              <div style="color: #ef9a9a; font-size: 16px; font-weight: 700; margin-bottom: 8px;">🚫 审核不通过 — 检测到高危漏洞</div>
+              <div style="color: rgba(255,255,255,0.7); font-size: 13px; line-height: 1.6;">
+                AI审计检测到 <strong style="color: #ef9a9a;">${findings.filter(f => f.severity === '高危' || f.severity === 'critical' || f.severity === 'Critical' || f.severity === 'high' || f.severity === 'High').length}</strong> 个高危漏洞。<br>
+                请修复上述高危漏洞后重新提交审计。
+              </div>
+            </div>
+            ` : `
+            <div style="color: #81c784;"><strong>✅ 审计完成：</strong>AI已完成安全审计分析，未发现高危漏洞。</div>
+            `}
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="report-section">
+          <div class="section-label">流程状态戳记</div>
+          <div class="section-value">
+            <div style="margin-bottom: 6px;"><strong>状态：</strong>${isBlocked ? '🚫 AI初审不通过 — 存在高危漏洞' : '✅ 通过 AI 初审'}</div>
+            <div style="margin-bottom: 6px;"><strong>时间戳：</strong>${new Date().toLocaleString()}</div>
+            <div><strong>AI 模型版本：</strong>DeepSeek-V4 / SecAI-v3</div>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        ${isBlocked ? `
+        <div class="report-section">
+          <div class="section-label">🚫 提交被拒绝</div>
+          <div class="section-value">
+            <div style="background: rgba(229,57,53,0.1); border: 1px solid rgba(229,57,53,0.2); border-radius: 10px; padding: 20px; text-align: center;">
+              <div style="color: #ef9a9a; font-size: 18px; font-weight: 700; margin-bottom: 12px;">检测到高危漏洞，无法生成提案</div>
+              <p style="color: rgba(255,255,255,0.6); font-size: 13px; margin-bottom: 16px;">
+                请修复上述高危漏洞后重新上传合约代码进行审计。
+              </p>
+              <button class="btn btn-outline" onclick="window.location.href='ai-review.html'">
+                <span>🔄</span> 重新提交审计
+              </button>
+            </div>
+          </div>
+        </div>
+        ` : `
+        <div class="report-section" id="paymentSection">
+          <div class="section-label">💳 支付审计费用</div>
+          <div class="section-value">
+            <div style="color: #ffd54f; margin-bottom: 8px; font-weight: 700;">
+              📋 审计报告已生成！请先完成支付，再生成链上提案。
+            </div>
+            <div id="paymentDetailBox" style="background: rgba(0,0,0,0.2); border-radius: 10px; padding: 16px; margin-bottom: 12px;">
+              <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;"><span>订单号</span><span style="color:#fff;font-weight:600;" id="payOrderId">-</span></div>
+              <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;"><span>服务层级</span><span style="color:#fff;" id="payTierName">-</span></div>
+              <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-bottom:1px solid rgba(255,255,255,0.1);"><span>审计费用</span><span style="color:#fff;" id="payBaseFee">-</span></div>
+              <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:15px;font-weight:700;"><span>应付金额</span><span style="color:#43a047;" id="payTotal">-</span></div>
+            </div>
+            <div id="paymentActions" style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="btn btn-success" onclick="handlePayment()" id="payBtn">
+                <span>💎</span> 使用 CEAT 代币支付
+              </button>
+            </div>
+            <div id="paymentStatus" class="msg" style="margin-top: 12px; display: none;"></div>
+          </div>
+        </div>
+
+        <div class="report-section" id="proposalActionSection" style="display:none;">
+          <div class="section-label">🎯 生成链上提案</div>
+          <div class="section-value">
+            <div style="color: #81c784; margin-bottom: 12px;">
+              <strong>✅ 支付已完成！</strong>
+            </div>
+            <p style="color: rgba(255,255,255,0.7); margin-bottom: 12px; font-size: 13px;">
+              点击下方按钮将提案提交至链上，社区和审计团队可以在任务列表中查看到该提案。
+            </p>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <button class="btn btn-success" onclick="generateProposal()" id="generateProposalBtn">
+                <span>🚀</span> 生成链上提案
+              </button>
+              <button class="btn btn-outline" onclick="skipProposal()">
+                <span>✗</span> 暂不生成
+              </button>
+            </div>
+            <div id="proposalResult" class="msg" style="margin-top: 12px; display: none;"></div>
+          </div>
+        </div>
+        `}
+
+        <div class="report-section" id="proposalSuccessSection" style="display: none;">
+          <div class="section-label">🎉 提案已生成</div>
+          <div class="section-value">
+            <div style="background: rgba(76, 175, 80, 0.1); border: 1px solid rgba(76, 175, 80, 0.2); border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+              <div style="color: #81c784; font-weight: 600; margin-bottom: 8px;">✅ 提案创建成功！</div>
+              <div style="margin-bottom: 6px;">
+                <strong>提案 ID：</strong>
+                <span id="createdProposalId" style="font-size: 18px; font-weight: 700; color: #667eea;">-</span>
+              </div>
+              <div style="margin-bottom: 6px;">
+                <strong>代码哈希：</strong>
+                <code style="font-size: 12px; color: rgba(255,255,255,0.7);">${taskInfo.code_hash || '未计算'}</code>
+              </div>
+              <div>
+                <strong>报告哈希：</strong>
+                <code style="font-size: 12px; color: rgba(255,255,255,0.7);" id="reportHashDisplay">-</code>
+              </div>
+            </div>
+            <div style="color: rgba(255,255,255,0.6); font-size: 13px; margin-bottom: 12px;">
+              📋 社区和审计团队的提案列表已刷新，可以前往查看并领取提案。
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <button class="btn btn-primary" onclick="goToDashboard()">
+                <span>📊</span> 前往社区提案列表
+              </button>
+              <button class="btn btn-outline" onclick="goToAuditTeam()">
+                <span>🔍</span> 前往审计团队提案列表
+              </button>
+              <button class="btn btn-outline" onclick="viewReportDetails()">
+                <span>📄</span> 查看报告详情
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    reportBody.innerHTML = html;
+    reportCard.style.display = 'block';
+    
+    reportBody.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => populatePaymentInfo(), 200);
+  }
+
+  let currentReportData = null;
+  let currentCodeHash = '';
+  let currentReportHash = '';
+  let paymentCompleted = false;
+
+  async function handlePayment() {
+    if (!Wallet.getAddress()) {
+      alert('请先连接钱包');
+      return;
+    }
+
+    document.getElementById('payBtn').disabled = true;
+    document.getElementById('paymentStatus').style.display = 'block';
+
+    try {
+      showPending('paymentStatus', '正在切换网络...');
+      await Wallet.switchToSepolia();
+
+      const CEAT_ADDRESS = CONFIG.CEAT_TOKEN_ADDRESS;
+      const DAO_ADDRESS = CONFIG.AUDIT_DAO_ADDRESS;
+      const provider = Wallet.getProvider();
+      if (!provider) throw new Error('钱包连接丢失，请刷新页面后重试');
+      const signer = provider.getSigner();
+      const tokenContract = new ethers.Contract(CEAT_ADDRESS, [
+        'function transfer(address to, uint256 amount) external returns (bool)',
+        'function decimals() external view returns (uint8)',
+        'function balanceOf(address account) external view returns (uint256)',
+      ], signer);
+
+      const decimals = await tokenContract.decimals();
+      const finalPayable = currentPricing ? (currentPricing.total_after_discount || currentPricing.final_payable) : 0;
+      const CEAT_PRICE_USD = 0.05;
+      const tokenAmount = ethers.utils.parseUnits(String(Math.ceil(finalPayable / CEAT_PRICE_USD)), decimals);
+
+      showPending('paymentStatus', '正在检查余额...');
+      
+      const balance = await tokenContract.balanceOf(Wallet.getAddress());
+      if (balance.lt(tokenAmount)) {
+        const balanceInCEAT = ethers.utils.formatUnits(balance, decimals);
+        const amountInCEAT = ethers.utils.formatUnits(tokenAmount, decimals);
+        showError('paymentStatus', `余额不足！当前余额: ${balanceInCEAT} CEAT，需要: ${amountInCEAT} CEAT`);
+        document.getElementById('payBtn').disabled = false;
+        return;
+      }
+
+      showPending('paymentStatus', '请在 MetaMask 中确认支付...');
+
+      const tx = await tokenContract.transfer(DAO_ADDRESS, tokenAmount);
+      await tx.wait();
+
+      showPending('paymentStatus', '正在确认支付状态...');
+
+      await axios.post(`${BACKEND_API}/pricing/orders/${currentOrderId}/pay?tx_hash=${encodeURIComponent(tx.hash)}&wallet_address=${encodeURIComponent(Wallet.getAddress())}`);
+
+      onPaymentSuccess(tx.hash);
+    } catch (e) {
+      const errorMsg = e.reason || e.message || '支付失败';
+      console.error('Payment error:', e);
+      if (errorMsg.includes('reverted')) {
+        showError('paymentStatus', '支付失败: 交易被回滚，请检查钱包余额或网络连接');
+      } else if (errorMsg.includes('user denied') || errorMsg.includes('rejected')) {
+        showError('paymentStatus', '支付失败: 用户取消了交易');
+      } else if (errorMsg.includes('Failed to fetch') || errorMsg.includes('network')) {
+        showError('paymentStatus', '支付失败: 网络连接异常，请检查：\n1. MetaMask 是否连接到 Sepolia 测试网\n2. 网络连接是否正常\n3. 刷新页面后重试');
+      } else if (errorMsg.includes('nonce') || errorMsg.includes('underpriced')) {
+        showError('paymentStatus', '支付失败: 交易排队拥堵，请等待几秒后重试');
+      } else {
+        showError('paymentStatus', '支付失败: ' + errorMsg);
+      }
+      document.getElementById('payBtn').disabled = false;
+    }
+  }
+
+  function onPaymentSuccess(txHash) {
+    paymentCompleted = true;
+    const total = currentPricing ? (currentPricing.total_after_discount || currentPricing.final_payable) : 0;
+    const detailHtml = `
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:13px;">
+        <span style="color:rgba(255,255,255,0.5);">订单号</span><span style="color:#fff;font-weight:600;">${currentOrderId}</span>
+        <span style="color:rgba(255,255,255,0.5);">支付方式</span><span style="color:#667eea;">CEAT 代币</span>
+        <span style="color:rgba(255,255,255,0.5);">支付金额</span><span style="color:#43a047;font-weight:700;font-size:15px;">$${total.toLocaleString(undefined, {minimumFractionDigits:2})}</span>
+        ${txHash ? `<span style="color:rgba(255,255,255,0.5);">交易哈希</span><code style="color:#81c784;font-size:11px;word-break:break-all;">${txHash}</code>` : ''}
+        <span style="color:rgba(255,255,255,0.5);">支付时间</span><span style="color:rgba(255,255,255,0.7);">${new Date().toLocaleString()}</span>
+        <span style="color:rgba(255,255,255,0.5);">状态</span><span style="color:#43a047;font-weight:600;">✅ 已支付</span>
+      </div>
+    `;
+    document.getElementById('paymentStatus').className = 'msg success';
+    document.getElementById('paymentStatus').innerHTML = detailHtml;
+    document.getElementById('paymentSection').style.display = 'none';
+    document.getElementById('proposalActionSection').style.display = 'block';
+  }
+
+  async function queryPaymentStatus() {
+    const orderId = prompt('请输入订单号查看支付凭证：', currentOrderId || '');
+    if (!orderId) return;
+    try {
+      const res = await axios.get(`${BACKEND_API}/pricing/orders/${orderId}/payment-status`);
+      const d = res.data;
+      alert(
+        `订单号: ${d.order_id}\n` +
+        `支付状态: ${d.payment_status === 'Paid' ? '✅ 已支付' : '⏳ 未支付'}\n` +
+        `应付金额: $${d.final_payable.toLocaleString()}\n` +
+        `支付方式: CEAT 代币\n` +
+        `关联提案: ${d.proposal_id || '未关联'}`
+      );
+    } catch (e) {
+      alert('查询失败：' + (e.response?.data?.detail || e.message));
+    }
+  }
+
+  function populatePaymentInfo() {
+    if (!currentPricing || !currentOrderId) return;
+    document.getElementById('payOrderId').textContent = currentOrderId;
+    document.getElementById('payTierName').textContent = currentPricing.tier_name;
+    document.getElementById('payBaseFee').textContent = '$' + (currentPricing.adjusted_base_fee || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
+    const total = currentPricing.total_after_discount || currentPricing.final_payable || 0;
+    document.getElementById('payBtn').innerHTML = '<span>💎</span> 支付 CEAT 代币';
+    const CEAT_PRICE = 0.05;
+    const ceatAmount = Math.ceil(total / CEAT_PRICE);
+    document.getElementById('payTotal').textContent = '$' + total.toLocaleString(undefined, {minimumFractionDigits: 2}) + ' ≈ ' + ceatAmount.toLocaleString() + ' CEAT';
+  }
+
+  async function generateProposal() {
+    if (!currentReportData) {
+      alert('报告数据异常，请重新提交审计');
+      return;
+    }
+
+    const btn = document.getElementById('generateProposalBtn');
+    const resultDiv = document.getElementById('proposalResult');
+    
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 生成中...';
+    resultDiv.style.display = 'block';
+    resultDiv.className = 'msg pending';
+    resultDiv.innerHTML = '<span class="spinner"></span> 正在调用管理端生成提案...';
+
+    try {
+      const codeHash = currentReportData.task_info?.code_hash || '';
+      const reportHash = currentReportData.final_verdict?.report_hash || '';
+      
+      currentCodeHash = codeHash;
+      currentReportHash = reportHash;
+
+      const response = await axios.post(BACKEND_API + '/admin/create-proposal', {
+        code_hash: codeHash,
+        description: `AI初审提案 - ${currentReportData.task_info?.audit_id || '自动生成'}`,
+        report_hash: reportHash
+      });
+
+      const proposalId = response.data.proposal_id;
+
+      if (currentOrderId && codeHash) {
+        try {
+          await axios.patch(`${BACKEND_API}/pricing/orders/${currentOrderId}/link?code_hash=${encodeURIComponent(codeHash)}&proposal_id=${proposalId}`);
+        } catch (linkErr) {
+          console.warn('Failed to link order to proposal:', linkErr);
+        }
+      }
+
+      resultDiv.className = 'msg success';
+      resultDiv.innerHTML = `<span>✅</span> 提案 #${proposalId} 创建成功！`;
+
+      document.getElementById('proposalActionSection').style.display = 'none';
+      document.getElementById('proposalSuccessSection').style.display = 'block';
+      document.getElementById('createdProposalId').textContent = proposalId;
+      document.getElementById('reportHashDisplay').textContent = reportHash ? ('0x' + reportHash) : '未生成';
+
+    } catch (e) {
+      const errorMsg = e.response?.data?.detail || e.message || '提案创建失败';
+      resultDiv.className = 'msg error';
+      resultDiv.innerHTML = `<span>❌</span> ${errorMsg}`;
+      btn.disabled = false;
+      btn.innerHTML = '<span>✅</span> 确认并生成提案';
+      console.error('生成提案失败:', e);
+    }
+  }
+
+  function skipProposal() {
+    if (!confirm('确定仅保留此报告而不生成提案吗？\n\n您之后仍可以从报告查询页面生成提案。')) {
+      return;
+    }
+    
+    document.getElementById('proposalActionSection').style.display = 'none';
+    
+    const resultDiv = document.createElement('div');
+    resultDiv.className = 'msg info';
+    resultDiv.innerHTML = '<span>ℹ</span> 报告已保存。您可以从报告查询页面查看此报告，或在需要时生成提案。';
+    document.getElementById('reportBody').appendChild(resultDiv);
+  }
+
+  function goToDashboard() {
+    window.location.href = 'dashboard.html';
+  }
+
+  function goToAuditTeam() {
+    window.location.href = 'audit-team.html';
+  }
+
+  function viewReportDetails() {
+    if (currentReportData) {
+      console.log('当前报告详情:', currentReportData);
+      alert('报告详情已输出到控制台 (F12 → Console)\n\n您可以在控制台查看完整的AI审计报告内容。');
+    }
+  }
+
+  function fillTestProposal() {
+    $('contractAddress').value = '0x1234567890abcdef1234567890abcdef12345678';
+    $('projectName').value = '测试项目 - TokenSale';
+    $('businessLogic').value = '这是一个代币销售合约，支持预售、白名单、多阶段销售等功能。合约使用 ERC20 代币标准，支持 ETH 和稳定币支付。';
+    $('auditScope').value = '1. 代币销售逻辑审计\n2. 白名单机制验证\n3. 资金安全审计\n4. 权限控制检查\n5. 重入攻击防护验证';
+    $('knownRisks').value = '已知风险：\n- 预售阶段可能存在抢跑攻击\n- 需要确保 KYC 验证机制的完整性\n- 流动性锁定时间需要确认';
+    $('contact').value = 'test@example.com';
+    $('expectedCompletionDate').value = '2026-06-15';
+    $('maxCompletionDays').value = '7';
+    $('needTaskReward').checked = true;
+
+    const mockCode1 = `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+interface IERC20 {
+    function transfer(address to, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+}
+
+contract TokenSale {
+    address public immutable owner;
+    IERC20 public immutable token;
+    uint256 public immutable price;
+    uint256 public totalSold;
+    
+    event TokensPurchased(address indexed buyer, uint256 amount, uint256 value);
+    event Withdrawn(uint256 amount);
+    
+    constructor(address _token, uint256 _price) {
+        require(_token != address(0), "Invalid token address");
+        require(_price > 0, "Price must be positive");
+        owner = msg.sender;
+        token = IERC20(_token);
+        price = _price;
+    }
+    
+    function buyTokens() external payable {
+        require(msg.value > 0, "Insufficient ETH");
+        
+        uint256 tokens = msg.value / price;
+        require(tokens > 0, "Not enough ETH to buy tokens");
+        
+        uint256 contractBalance = token.balanceOf(address(this));
+        require(tokens <= contractBalance, "Insufficient token balance");
+        
+        totalSold += tokens;
+        
+        bool success = token.transfer(msg.sender, tokens);
+        require(success, "Token transfer failed");
+        
+        emit TokensPurchased(msg.sender, tokens, msg.value);
+    }
+    
+    function withdraw() external {
+        require(msg.sender == owner, "Not owner");
+        
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No ETH to withdraw");
+        
+        payable(owner).transfer(balance);
+        
+        emit Withdrawn(balance);
+    }
+    
+    receive() external payable {
+        revert("Use buyTokens() to purchase tokens");
+    }
+    
+    fallback() external payable {
+        revert("Use buyTokens() to purchase tokens");
+    }
+}`;
+
+    const mockCode2 = `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+contract MyToken is ERC20 {
+    constructor() ERC20("MyToken", "MTK") {
+        _mint(msg.sender, 1000000 * 10 ** decimals());
+    }
+}`;
+
+    const file1 = new File([mockCode1], 'TokenSale.sol', { type: 'text/plain' });
+    const file2 = new File([mockCode2], 'MyToken.sol', { type: 'text/plain' });
+
+    selectedFiles = [file1, file2];
+    updateFileList();
+
+    showSuccess('uploadResult', '✅ 测试提案数据已填写完成！\n\n已创建测试合约文件：TokenSale.sol, MyToken.sol');
+  }
+
+  Wallet.registerEvents();
+  Wallet.autoConnect();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CreatDAO - 社区审计提案编写</title>
+  <link rel="stylesheet" href="common.css?v=2">
+  <script src="lib/ethers.min.js?v=2"></script>
+  <script src="lib/axios.min.js?v=2"></script>
+  <script src="lib/sha256.min.js?v=2"></script>
+  <script src="common.js?v=2"></script>
+  <script src="config.js?v=4"></script>
+  <script src="contract.js?v=6"></script>
+  <script src="wallet.js?v=3"></script>
+  <style>
+    .risk-selector { display: flex; gap: 10px; }
+    .risk-option {
+      padding: 10px 20px;
+      border: 2px solid transparent;
+      border-radius: 10px;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s;
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0.55;
+    }
+    .risk-option:hover { transform: translateY(-2px); opacity: 0.8; }
+    .risk-option.selected {
+      opacity: 1;
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.5), 0 4px 16px rgba(0,0,0,0.35);
+      transform: scale(1.04);
+    }
+    .risk-option.critical { background: rgba(229,57,53,0.15); border-color: #ef5350; color: #ef9a9a; }
+    .risk-option.high { background: rgba(229,57,53,0.12); border-color: #e53935; color: #ef9a9a; }
+    .risk-option.medium { background: rgba(255,152,0,0.12); border-color: #ff9800; color: #ffcc80; }
+    .risk-option.low { background: rgba(76,175,80,0.12); border-color: #4caf50; color: #81c784; }
+    .risk-option.info { background: rgba(33,150,243,0.12); border-color: #2196f3; color: #90caf9; }
+
+    .finding-item {
+      background: rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .finding-item .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .finding-item .item-number { font-size: 14px; font-weight: 700; color: #667eea; }
+    .finding-item .item-actions { display: flex; gap: 8px; }
+    .finding-item textarea { width: 100%; margin-bottom: 10px; }
+
+    .report-preview {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 24px;
+      white-space: pre-wrap;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      color: rgba(255,255,255,0.8);
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .btn-group { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    .wallet-status { display: flex; align-items: center; gap: 8px; padding: 7px 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; font-size: 13px; }
+    .wallet-status .dot-indicator { width: 8px; height: 8px; border-radius: 50%; }
+    .wallet-status .dot-indicator.disconnected { background: #666; }
+    .wallet-status .dot-indicator.connected { background: #4caf50; box-shadow: 0 0 8px rgba(76,175,80,0.5); }
+    .wallet-status .addr { font-family: 'SF Mono', 'Fira Code', monospace; color: rgba(255,255,255,0.7); }
+
+    .community-write-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 20px; margin-bottom: 14px; transition: all 0.3s ease; }
+    .community-write-card:hover { border-color: rgba(229,57,53,0.2); }
+    .community-write-card .section-label { font-size: 12px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .write-area { min-height: 200px; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px; background: rgba(0,0,0,0.25); font-size: 14px; line-height: 1.7; color: #e0e0e0; outline: none; resize: vertical; transition: border-color 0.3s; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+    .write-area:focus { border-color: rgba(233,30,99,0.4); box-shadow: 0 0 0 3px rgba(233,30,99,0.06); }
+
+    @media (max-width: 700px) {
+      .form-row { flex-direction: column; align-items: stretch; }
+      .form-row label { min-width: auto; padding-top: 0; margin-bottom: 6px; }
+      .card { padding: 16px; }
+      .risk-selector { flex-wrap: wrap; }
+    }
+  </style>
+
+</head>
+<body>
+<div class="app-container">
+
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">📝</div>
+      <div class="title">
+        <h1>社区审计提案编写</h1>
+        <span>CreatDAO Community Audit Report</span>
+      </div>
+    </div>
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <div class="wallet-status" id="walletStatus">
+        <span class="dot-indicator disconnected"></span>
+        <span style="color:rgba(255,255,255,0.4);">未连接</span>
+      </div>
+      <button class="btn btn-outline" onclick="window.location.href='home.html'">返回用户端</button>
+    </div>
+  </header>
+
+  <div class="panel-header">
+    <h1>社区审计提案编写模块</h1>
+    <p>编辑审计提案内容，自动生成提案哈希并发布至链上</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">🔗</div>
+      <div>
+        <div class="card-title">钱包连接</div>
+        <div class="card-desc">连接钱包后才能提交提案至链上</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <button class="btn btn-primary" onclick="connectWallet()" id="connectBtn">连接钱包</button>
+      <div id="balanceInfo" class="msg info">连接钱包后查看质押信息</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">📋</div>
+      <div>
+        <div class="card-title">提案基本信息</div>
+        <div class="card-desc">填写审计提案的基本信息</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>提案 ID</label>
+        <input id="proposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+        <button class="btn btn-outline btn-sm" onclick="loadProposalInfo()">查询提案信息</button>
+      </div>
+      <div class="form-row">
+        <label>合约地址</label>
+        <input id="contractAddress" class="inp inp-hash" type="text" placeholder="0x...">
+      </div>
+      <div class="form-row">
+        <label>代码哈希</label>
+        <input id="codeHash" class="inp inp-hash" type="text" placeholder="0x...">
+      </div>
+      <div class="form-row">
+        <label>项目名称</label>
+        <input id="projectName" class="inp inp-wide" type="text" placeholder="项目名称">
+      </div>
+      <div class="form-row">
+        <label>合约版本</label>
+        <input id="contractVersion" class="inp inp-wide" type="text" placeholder="例如: v1.0.0">
+      </div>
+      <pre id="proposalInfoDisplay" class="code-block" style="display:none;"></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon orange">📊</div>
+      <div>
+        <div class="card-title">一、审计摘要</div>
+        <div class="card-desc">精简的审计结论摘要</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row full-width">
+        <label>风险评级</label>
+        <div class="risk-selector" id="riskSelector">
+          <div class="risk-option critical" onclick="selectRisk('critical')">🔴 高危 (Critical)</div>
+          <div class="risk-option high" onclick="selectRisk('high')">🟠 高危 (High)</div>
+          <div class="risk-option medium" onclick="selectRisk('medium')">🟡 中危 (Medium)</div>
+          <div class="risk-option low" onclick="selectRisk('low')">🟢 低危 (Low)</div>
+          <div class="risk-option info" onclick="selectRisk('info')">🔵 信息提示</div>
+        </div>
+      </div>
+      
+      <div class="form-row full-width">
+        <label>审计结论概述</label>
+        <textarea id="auditSummary" class="inp inp-textarea" placeholder="简要描述审计结论和整体评估..."></textarea>
+      </div>
+
+      <div class="form-row full-width">
+        <label>主要发现</label>
+        <textarea id="mainFindings" class="inp inp-textarea large" placeholder="列出审计过程中发现的主要问题和漏洞..."></textarea>
+      </div>
+
+      <div class="form-row full-width">
+        <label>建议与改进</label>
+        <textarea id="recommendations" class="inp inp-textarea" placeholder="针对发现的问题提出修复建议..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon cyan">🔍</div>
+      <div>
+        <div class="card-title">二、详细发现列表</div>
+        <div class="card-desc">逐条列出审计发现的具体问题</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="findingList">
+        <div class="finding-item">
+          <div class="item-header">
+            <span class="item-number">发现 #1</span>
+            <div class="item-actions">
+              <select id="findingSeverity1" class="inp inp-sm" style="width: 120px;">
+                <option value="critical">🔴 高危</option>
+                <option value="high">🟠 高危</option>
+                <option value="medium">🟡 中危</option>
+                <option value="low">🟢 低危</option>
+                <option value="info">🔵 信息</option>
+              </select>
+              <button class="btn btn-danger btn-sm" onclick="removeFinding(1)">删除</button>
+            </div>
+          </div>
+          <textarea id="findingTitle1" class="inp inp-textarea" placeholder="问题标题..." style="min-height: 60px;"></textarea>
+          <textarea id="findingDesc1" class="inp inp-textarea" placeholder="详细描述问题内容、影响范围和潜在风险..."></textarea>
+          <textarea id="findingLocation1" class="inp inp-textarea" placeholder="代码位置（如：合约名.sol:行号）..." style="min-height: 60px;"></textarea>
+        </div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="addFinding()" style="align-self:flex-start;">+ 添加发现项</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon green">✅</div>
+      <div>
+        <div class="card-title">三、审计声明</div>
+        <div class="card-desc">社区审计报告声明</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row full-width">
+        <label>审计方法说明</label>
+        <textarea id="auditMethod" class="inp inp-textarea" placeholder="描述采用的审计方法和工具..."></textarea>
+      </div>
+      <div class="form-row full-width">
+        <label>审计范围</label>
+        <textarea id="auditScope" class="inp inp-textarea" placeholder="描述审计覆盖的范围和边界..."></textarea>
+      </div>
+      <div class="form-row full-width">
+        <label>免责声明</label>
+        <textarea id="disclaimer" class="inp inp-textarea" placeholder="审计报告的免责声明内容..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">🧪</div>
+      <div>
+        <div class="card-title">四、测试报告</div>
+        <div class="card-desc">记录合约功能测试与安全测试结果</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row full-width">
+        <label>测试环境</label>
+        <textarea id="testEnvironment" class="inp inp-textarea" placeholder="描述测试环境：网络、节点版本、编译器版本、测试框架等..."></textarea>
+      </div>
+      <div class="form-row full-width">
+        <label>测试用例概览</label>
+        <textarea id="testCases" class="inp inp-textarea large" placeholder="列出主要测试用例及覆盖的功能模块..."></textarea>
+      </div>
+      <div class="form-row full-width">
+        <label>测试结果</label>
+        <textarea id="testResults" class="inp inp-textarea large" placeholder="记录测试执行结果：通过/失败的用例数量、关键测试输出、代码覆盖率等..."></textarea>
+      </div>
+      <div class="form-row full-width">
+        <label>测试结论</label>
+        <textarea id="testConclusion" class="inp inp-textarea" placeholder="总结测试整体结论，是否发现新的漏洞或回归问题..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">📤</div>
+      <div>
+        <div class="card-title">五、生成并发布提案</div>
+        <div class="card-desc">自动生成提案哈希并提交至链上</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="hashDisplay" style="display: none;">
+        <div style="font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 6px;">提案哈希（SHA-256）：</div>
+        <div class="code-block" id="proposalHash">0x...</div>
+        <div style="font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 8px;">
+          提示：此哈希将用于链上提交，请确认报告内容无误后再提交
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="fillTestReport()">📝 填写测试报告</button>
+        <button class="btn btn-primary" onclick="generateProposalHash()">生成提案哈希</button>
+        <button class="btn btn-outline" onclick="previewReport()" id="previewBtn" disabled>预览报告</button>
+        <button class="btn btn-success" onclick="submitProposal()" id="submitBtn" disabled>发布提案至链上</button>
+      </div>
+
+      <div id="submitResult" class="msg"></div>
+    </div>
+  </div>
+
+  <div class="card" id="previewCard" style="display: none;">
+    <div class="card-header">
+      <div class="card-icon purple">👁️</div>
+      <div>
+        <div class="card-title">报告预览</div>
+        <div class="card-desc">社区审计报告完整内容预览</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="report-preview" id="reportPreview"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+
+
+
+
+  function _A(){return Wallet.getContracts().auditDAO;}
+  function _S(){return Wallet.getSigner();}
+  function _U(){return Wallet.getAddress();}
+  let selectedRisk = '';
+  let reportData = {};
+  let findingCount = 1;
+  let proposalHash = '';
+
+  function selectRisk(risk) {
+    selectedRisk = risk;
+    window.__selectedRisk = risk;
+    const options = document.querySelectorAll('.risk-option');
+    options.forEach(opt => opt.classList.remove('selected'));
+    const el = document.querySelector('.risk-option.' + risk);
+    if (el) el.classList.add('selected');
+  }
+
+  function addFinding() {
+    findingCount++;
+    const list = $('findingList');
+    const item = document.createElement('div');
+    item.className = 'finding-item';
+    item.id = `findingItem${findingCount}`;
+    item.innerHTML = `
+      <div class="item-header">
+        <span class="item-number">发现 #${findingCount}</span>
+        <div class="item-actions">
+          <select id="findingSeverity${findingCount}" class="inp inp-sm" style="width: 120px;">
+            <option value="critical">🔴 高危</option>
+            <option value="high">🟠 高危</option>
+            <option value="medium">🟡 中危</option>
+            <option value="low">🟢 低危</option>
+            <option value="info">🔵 信息</option>
+          </select>
+          <button class="btn btn-danger btn-sm" onclick="removeFinding(${findingCount})">删除</button>
+        </div>
+      </div>
+      <textarea id="findingTitle${findingCount}" class="inp inp-textarea" placeholder="问题标题..." style="min-height: 60px;"></textarea>
+      <textarea id="findingDesc${findingCount}" class="inp inp-textarea" placeholder="详细描述问题内容..."></textarea>
+      <textarea id="findingLocation${findingCount}" class="inp inp-textarea" placeholder="代码位置..." style="min-height: 60px;"></textarea>
+    `;
+    list.appendChild(item);
+  }
+
+  function removeFinding(num) {
+    const item = $(`findingItem${num}`);
+    if (item) item.remove();
+  }
+
+  function fillTestReport() {
+    $('testEnvironment').value = '网络: Ethereum Sepolia Testnet\n节点版本: Geth v1.13.14\nSolidity 编译器: 0.8.20+commit.a1b79de6\n测试框架: Hardhat + Mocha + Chai\n测试工具: Slither (静态分析), Echidna (Fuzz测试), Mythril (安全分析)';
+    $('testCases').value = '1. 功能测试: 验证 deposit/withdraw 核心流程\n2. 权限测试: 验证 onlyOwner 修饰器是否正确生效\n3. 边界测试: 测试 uint256 溢出、除零等边界条件\n4. 重入攻击测试: 验证 withdraw 函数的 checks-effects-interactions 模式\n5. 访问控制测试: 测试越权调用敏感函数\n6. 事件测试: 验证所有关键操作的事件发射\n7. Gas 消耗测试: 评估各函数的 Gas 使用情况';
+    $('testResults').value = '✅ 功能测试: 12/12 全部通过\n✅ 权限测试: 8/8 全部通过\n✅ 边界测试: 15/15 全部通过\n✅ 重入攻击测试: 已确认安全，withdraw 使用 checks-effects-interactions 模式\n✅ 访问控制测试: 10/10 全部通过\n✅ 事件测试: 6/6 全部通过\n⚠️ Gas 消耗测试: deposit 函数 Gas 较高 (~120k)，建议优化\n\n代码覆盖率: 92.3% (语句), 87.5% (分支), 100% (函数)\n静态分析(Slither): 发现 0 个高危, 2 个信息提示\nFuzz 测试(Echidna): 运行 50,000 次未发现异常';
+    $('testConclusion').value = '合约核心功能测试全部通过，安全机制验证有效。未发现严重漏洞或回归问题。Slither 静态分析报告的两个信息提示项已确认不影响安全性。建议优化 deposit 函数的 Gas 消耗，其余结论良好。';
+    showSuccess('submitResult', '测试报告模板已填充，请根据实际测试情况修改！');
+  }
+
+  async function connectWallet() {
+    const btn = document.getElementById('connectBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 连接中...';
+    try {
+      var ok = await Wallet.connect();
+      if (ok) {
+        btn.textContent = '已连接';
+        await loadStakeInfo();
+      } else {
+        btn.disabled = false;
+        btn.textContent = '连接钱包';
+      }
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = '连接钱包';
+      console.error('Connect wallet failed:', e);
+    }
+  }
+
+  async function loadStakeInfo() {
+    var _addr = _U(); if (!_addr) return;
+    showPending('balanceInfo', '正在查询质押信息...');
+    try {
+      const stakerInfo = await _A().getStakerInfo(_addr);
+      const stakedBalance = parseFloat(ethers.utils.formatEther(stakerInfo.balance)).toFixed(4);
+      showSuccess('balanceInfo', '已质押: <strong>' + stakedBalance + '</strong> CEAT');
+    } catch (e) {
+      showError('balanceInfo', '查询失败: ' + (e.reason || e.message || '').slice(0, 100));
+    }
+  }
+
+  async function loadProposalInfo() {
+    if (!Wallet.isConnected()) {
+      alert('请先连接钱包');
+      return;
+    }
+    const pid = $('proposalId').value;
+    showPending('submitResult', '正在查询提案信息...');
+    try {
+      const p = await _A().getProposalSummary(pid);
+      $('proposalInfoDisplay').style.display = 'block';
+      $('proposalInfoDisplay').innerText = JSON.stringify({
+        proposalId: p.id.toString(),
+        codeHash: p.codeHash,
+        auditReportHash: p.auditReportHash,
+        status: CONFIG.PROPOSAL_STATUS[p.status],
+        statusNum: p.status,
+        riskLevel: p.riskLevel,
+        createdAt: p.createdAt.toString()
+      }, null, 2);
+      
+      if (p.codeHash && p.codeHash !== '0x' + '0'.repeat(64)) {
+        $('codeHash').value = p.codeHash;
+      }
+      
+      showSuccess('submitResult', '提案信息已加载');
+    } catch (e) {
+      showError('submitResult', '查询失败: ' + (e.reason || e.message || '').slice(0, 100));
+    }
+  }
+
+  function generateProposalHash() {
+    if (!selectedRisk) {
+      if (window.__selectedRisk) { selectedRisk = window.__selectedRisk; }
+      else { alert('请选择风险评级'); return; }
+    }
+
+    const riskLabels = {
+      'critical': '高危 (Critical)',
+      'high': '高危 (High)',
+      'medium': '中危 (Medium)',
+      'low': '低危 (Low)',
+      'info': '信息提示'
+    };
+
+    const findings = [];
+    for (let i = 1; i <= findingCount; i++) {
+      const title = $(`findingTitle${i}`)?.value?.trim();
+      const desc = $(`findingDesc${i}`)?.value?.trim();
+      const location = $(`findingLocation${i}`)?.value?.trim();
+      const severity = $(`findingSeverity${i}`)?.value;
+      if (title || desc) {
+        findings.push({ title, description: desc, location, severity });
+      }
+    }
+
+    reportData = {
+      proposalId: $('proposalId').value,
+      contractAddress: $('contractAddress').value,
+      codeHash: $('codeHash').value,
+      projectName: $('projectName').value,
+      contractVersion: $('contractVersion').value,
+      riskLevel: riskLabels[selectedRisk],
+      auditSummary: $('auditSummary').value,
+      mainFindings: $('mainFindings').value,
+      recommendations: $('recommendations').value,
+      findings: findings,
+      auditMethod: $('auditMethod').value,
+      auditScope: $('auditScope').value,
+      disclaimer: $('disclaimer').value,
+      testEnvironment: $('testEnvironment').value,
+      testCases: $('testCases').value,
+      testResults: $('testResults').value,
+      testConclusion: $('testConclusion').value,
+      generatedAt: new Date().toISOString(),
+      author: _U() || 'unknown',
+      version: '1.0'
+    };
+
+    const reportJson = JSON.stringify(reportData, null, 2);
+    proposalHash = '0x' + sha256(reportJson).toLowerCase();
+    
+    $('proposalHash').textContent = proposalHash;
+    $('hashDisplay').style.display = 'block';
+    $('previewBtn').disabled = false;
+    $('submitBtn').disabled = false;
+    
+    showSuccess('submitResult', '提案哈希已生成！');
+  }
+
+  function previewReport() {
+    if (!proposalHash) {
+      alert('请先生成提案哈希');
+      return;
+    }
+
+    const riskLabels = {
+      'critical': '🔴 高危 (Critical)',
+      'high': '🟠 高危 (High)',
+      'medium': '🟡 中危 (Medium)',
+      'low': '🟢 低危 (Low)',
+      'info': '🔵 信息提示'
+    };
+
+    let preview = `╔════════════════════════════════════════════════════════════════╗
+║              CreatDAO 社区审计报告                              ║
+╚════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【基本信息】
+  提案 ID: ${reportData.proposalId}
+  项目名称: ${reportData.projectName || '未指定'}
+  合约版本: ${reportData.contractVersion || '未指定'}
+  合约地址: ${reportData.contractAddress || '未提供'}
+  代码哈希: ${reportData.codeHash || '未提供'}
+  生成时间: ${new Date(reportData.generatedAt).toLocaleString('zh-CN')}
+  报告作者: ${reportData.author}
+  报告版本: ${reportData.version}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【一、审计摘要】
+
+  风险评级: ${riskLabels[selectedRisk]}
+  ────────────────────────────────────────────────────────────────
+  
+  审计结论概述:
+  ────────────────────────────────────────────────────────────────
+  ${reportData.auditSummary || '(未填写)'}
+
+  主要发现:
+  ────────────────────────────────────────────────────────────────
+  ${reportData.mainFindings || '(未填写)'}
+
+  建议与改进:
+  ────────────────────────────────────────────────────────────────
+  ${reportData.recommendations || '(未填写)'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【二、详细发现列表】
+
+  ${reportData.findings.length === 0 ? '  (无详细发现记录)' : 
+    reportData.findings.map((f, i) => `
+  发现 #${i + 1}
+  ────────────────────────────────────────────────────────────────
+  严重程度: ${f.severity || '未指定'}
+  标题: ${f.title || '未填写'}
+  位置: ${f.location || '未指定'}
+  
+  详细描述:
+  ${f.description || '(未填写)'}
+`).join('\n')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【三、审计声明】
+
+  审计方法:
+  ────────────────────────────────────────────────────────────────
+  ${reportData.auditMethod || '(未填写)'}
+
+  审计范围:
+  ────────────────────────────────────────────────────────────────
+  ${reportData.auditScope || '(未填写)'}
+
+  免责声明:
+  ────────────────────────────────────────────────────────────────
+  ${reportData.disclaimer || '(未填写)'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【四、测试报告】
+
+  测试环境:
+  ────────────────────────────────────────────────────────────────
+  ${reportData.testEnvironment || '(未填写)'}
+
+  测试用例概览:
+  ────────────────────────────────────────────────────────────────
+  ${reportData.testCases || '(未填写)'}
+
+  测试结果:
+  ────────────────────────────────────────────────────────────────
+  ${reportData.testResults || '(未填写)'}
+
+  测试结论:
+  ────────────────────────────────────────────────────────────────
+  ${reportData.testConclusion || '(未填写)'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【提案哈希】
+  SHA-256: ${proposalHash}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ 社区审计声明：本报告由社区成员编写，仅供参考。
+`;
+
+    $('reportPreview').textContent = preview;
+    $('previewCard').style.display = 'block';
+    $('previewCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function submitProposal() {
+    if (!proposalHash) {
+      alert('请先生成提案哈希');
+      return;
+    }
+
+    if (!isConnected) {
+      alert('请先连接钱包');
+      return;
+    }
+
+    const pid = $('proposalId').value;
+
+    try {
+      showPending('submitResult', '正在检查提案状态...');
+
+      const p = await _A().getProposalSummary(pid);
+      const currentStatus = CONFIG.PROPOSAL_STATUS[p.status];
+
+      if (p.status >= 7 && p.status <= 9) {
+        showError('submitResult', '当前提案状态为 <strong>' + currentStatus + '</strong>，此阶段无法提交社区方案');
+        return;
+      }
+
+      showPending('submitResult', '正在提交提案至链上...');
+
+      const tx = await _A().submitCommunityProposal(pid, proposalHash);
+      await tx.wait();
+
+      showSuccess('submitResult', '提案发布成功！交易哈希: ' + tx.hash.slice(0, 20) + '...');
+    } catch (e) {
+      if (e.code === 4001 || (e.message && e.message.toLowerCase().includes('user rejected'))) {
+        showError('submitResult', '已取消操作');
+      } else if (e.reason && e.reason.includes('Insufficient stake')) {
+        showError('submitResult', '质押数量不足，请确保质押至少 600 CEAT');
+      } else if (e.reason && e.reason.includes('Invalid status')) {
+        showError('submitResult', '提案不在可提交阶段');
+      } else {
+        showError('submitResult', '提交失败: ' + (e.reason || e.message || String(e)).slice(0, 200));
+      }
+    }
+  }
+
+  Wallet.registerEvents();
+  Wallet.setCallbacks(function() { loadStakeInfo(); }, function() {
+    var el = document.getElementById('balanceInfo'); if (el) { el.className = 'msg info'; el.innerHTML = '连接钱包后查看质押信息'; }
+  });
+  Wallet.autoConnect();
+</script>
+</body>
+</html>

@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CreatDAO - 审计团队报告编写</title>
+  <link rel="stylesheet" href="common.css?v=2">
+  <script src="lib/ethers.min.js?v=2"></script>
+  <script src="lib/axios.min.js?v=2"></script>
+  <script src="lib/sha256.min.js?v=2"></script>
+  <script src="common.js?v=2"></script>
+  <script src="config.js?v=4"></script>
+  <script src="contract.js?v=6"></script>
+  <script src="wallet.js?v=3"></script>
+  <style>
+    .risk-selector { display: flex; gap: 10px; }
+    .risk-option {
+      padding: 10px 20px;
+      border: 2px solid transparent;
+      border-radius: 10px;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s;
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0.55;
+    }
+    .risk-option:hover { transform: translateY(-2px); opacity: 0.8; }
+    .risk-option.selected {
+      opacity: 1;
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.5), 0 4px 16px rgba(0,0,0,0.35);
+      transform: scale(1.04);
+    }
+    .risk-option.critical { background: rgba(229,57,53,0.15); border-color: #ef5350; color: #ef9a9a; }
+    .risk-option.high { background: rgba(229,57,53,0.12); border-color: #e53935; color: #ef9a9a; }
+    .risk-option.medium { background: rgba(255,152,0,0.12); border-color: #ff9800; color: #ffcc80; }
+    .risk-option.low { background: rgba(76,175,80,0.12); border-color: #4caf50; color: #81c784; }
+    .risk-option.info { background: rgba(33,150,243,0.12); border-color: #2196f3; color: #90caf9; }
+
+    .disagreement-item {
+      background: rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .disagreement-item .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .disagreement-item .item-number { font-size: 14px; font-weight: 700; color: #667eea; }
+    .disagreement-item .item-actions { display: flex; gap: 8px; }
+    .disagreement-item textarea { width: 100%; margin-bottom: 10px; }
+
+    .evidence-section {
+      background: rgba(229,57,53,0.08);
+      border: 1px solid rgba(229,57,53,0.15);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .evidence-section .evidence-warning {
+      color: #ef9a9a;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .checkbox-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 10px;
+    }
+    .checkbox-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: #667eea; }
+    .checkbox-row label { font-size: 14px; color: #e0e0e0; padding-top: 0 !important; }
+
+    .report-preview {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 24px;
+      white-space: pre-wrap;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      color: rgba(255,255,255,0.8);
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .btn-group { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    .editor-toolbar { display: flex; gap: 6px; padding: 8px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-bottom: none; border-radius: 12px 12px 0 0; flex-wrap: wrap; }
+    .tool-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.5); cursor: pointer; font-size: 14px; transition: all 0.2s; }
+    .tool-btn:hover { background: rgba(255,255,255,0.08); color: #fff; border-color: rgba(255,255,255,0.15); }
+    .tool-btn.active { background: rgba(102,126,234,0.2); color: #667eea; border-color: rgba(102,126,234,0.3); }
+    .editor-area { min-height: 300px; border: 1px solid rgba(255,255,255,0.06); border-radius: 0 0 12px 12px; padding: 16px; background: rgba(0,0,0,0.25); font-size: 14px; line-height: 1.7; outline: none; color: #e0e0e0; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; transition: border-color 0.3s; }
+    .editor-area:focus { border-color: rgba(102,126,234,0.4); box-shadow: 0 0 0 3px rgba(102,126,234,0.06); }
+    .editor-area:empty::before { content: '在此编写审计报告内容...'; color: rgba(255,255,255,0.2); }
+    .hash-display { font-family: 'SF Mono','Fira Code',monospace; font-size: 12px; color: rgba(102,126,234,0.6); background: rgba(0,0,0,0.3); padding: 10px 14px; border-radius: 8px; word-break: break-all; margin-top: 8px; }
+
+    .matrix-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .matrix-table th { background: rgba(102,126,234,0.15); padding: 10px 8px; text-align: left; font-weight: 600; color: rgba(255,255,255,0.8); border-bottom: 2px solid rgba(102,126,234,0.3); font-size: 12px; white-space: nowrap; }
+    .matrix-table td { padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: middle; }
+    .matrix-table .inp { width: 100%; padding: 6px 8px; font-size: 12px; border-radius: 6px; }
+    .matrix-table .inp-sm { width: 100%; padding: 6px 8px; font-size: 12px; border-radius: 6px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); color: #e0e0e0; outline: none; }
+    .matrix-table .inp-sm:focus { border-color: rgba(102,126,234,0.4); }
+
+    @media (max-width: 700px) {
+      .form-row { flex-direction: column; align-items: stretch; }
+      .form-row label { min-width: auto; padding-top: 0; margin-bottom: 6px; }
+      .card { padding: 16px; }
+      .risk-selector { flex-wrap: wrap; }
+    }
+  </style>
+
+</head>
+<body>
+<div class="app-container">
+
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">📝</div>
+      <div class="title">
+        <h1>审计团队报告编写</h1>
+        <span>CreatDAO Audit Team Report</span>
+      </div>
+    </div>
+    <button class="btn btn-outline" onclick="window.location.href='audit-team.html'">返回审计团队端</button>
+  </header>
+
+  <div class="panel-header">
+    <h1>审计团队报告</h1>
+    <p>审计团队代表权威性，报告更需保证可追溯性和可裁决性</p>
+  </div>
+
+  <!-- 提案信息 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">📋</div>
+      <div>
+        <div class="card-title">提案信息</div>
+        <div class="card-desc">填写审计相关的提案基本信息</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>提案 ID</label>
+        <input id="proposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+        <label>经审计合约版本</label>
+        <input id="contractVersion" class="inp inp-wide" type="text" placeholder="例如: v1.0.0, commit: abc123">
+      </div>
+      <div class="form-row">
+        <label>合约地址</label>
+        <input id="contractAddress" class="inp inp-hash" type="text" placeholder="0x...">
+      </div>
+      <div class="form-row">
+        <label>代码哈希</label>
+        <input id="codeHash" class="inp inp-hash" type="text" placeholder="0x...">
+      </div>
+    </div>
+  </div>
+
+  <!-- 核心结论函 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon orange">📊</div>
+      <div>
+        <div class="card-title">一、核心结论函</div>
+        <div class="card-desc">精简的、面向决策者的摘要</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row full-width">
+        <label>最终风险评级</label>
+        <div class="risk-selector" id="riskSelector">
+          <div class="risk-option critical" onclick="selectRisk('critical')">🔴 高危 (Critical)</div>
+          <div class="risk-option high" onclick="selectRisk('high')">🟠 高危 (High)</div>
+          <div class="risk-option medium" onclick="selectRisk('medium')">🟡 中危 (Medium)</div>
+          <div class="risk-option low" onclick="selectRisk('low')">🟢 低危 (Low)</div>
+          <div class="risk-option info" onclick="selectRisk('info')">🔵 信息提示</div>
+        </div>
+      </div>
+      
+      <div class="form-row full-width">
+        <label>风险评级说明</label>
+        <textarea id="riskExplanation" class="inp inp-textarea" placeholder="详细说明风险评级的依据和理由..."></textarea>
+      </div>
+
+      <div class="form-row full-width">
+        <label>核心发现综述</label>
+        <textarea id="keyFindings" class="inp inp-textarea large" placeholder="列出审计过程中发现的主要安全问题和漏洞..."></textarea>
+      </div>
+
+      <div class="form-row full-width">
+        <label>最终建议</label>
+        <textarea id="finalRecommendations" class="inp inp-textarea" placeholder="针对发现的问题提出具体的修复建议和改进措施..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- 审计发现矩阵 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon red">🔍</div>
+      <div>
+        <div class="card-title">二、审计发现矩阵</div>
+        <div class="card-desc">标准化的漏洞发现列表，所有报告方（AI/团队/社区）必须遵循此格式</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="findingsMatrix">
+        <table class="matrix-table" id="findingsTable">
+          <thead>
+            <tr>
+              <th style="width:70px;">ID</th>
+              <th style="width:90px;">严重程度</th>
+              <th style="width:140px;">位置</th>
+              <th style="width:110px;">漏洞类型</th>
+              <th>描述</th>
+              <th style="width:80px;">结论</th>
+              <th style="width:60px;"></th>
+            </tr>
+          </thead>
+          <tbody id="findingsTableBody">
+            <tr class="finding-row">
+              <td><input class="inp inp-sm" style="width:70px;" placeholder="FT-001"></td>
+              <td>
+                <select class="inp inp-sm severity-select" style="width:90px;">
+                  <option value="Critical">高危</option>
+                  <option value="High">高危</option>
+                  <option value="Medium" selected>中危</option>
+                  <option value="Low">低危</option>
+                  <option value="Info">信息</option>
+                </select>
+              </td>
+              <td><input class="inp inp-sm" style="width:140px;" placeholder="合约名→函数名"></td>
+              <td><input class="inp inp-sm" style="width:110px;" placeholder="如: 重入攻击"></td>
+              <td><input class="inp inp-sm" style="flex:1;min-width:180px;" placeholder="漏洞描述..."></td>
+              <td>
+                <select class="inp inp-sm" style="width:80px;">
+                  <option value="BLOCK">BLOCK</option>
+                  <option value="PASS-WARN" selected>PASS-WARN</option>
+                </select>
+              </td>
+              <td><button class="btn btn-outline btn-sm" onclick="removeFindingRow(this)" title="删除">✕</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="addFindingRow()" style="align-self:flex-start;margin-top:8px;">+ 添加发现项</button>
+    </div>
+  </div>
+
+  <!-- 对齐意见书 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon cyan">🤝</div>
+      <div>
+        <div class="card-title">三、对齐意见书</div>
+        <div class="card-desc">逐条回应社区报告中的分歧点，说明采纳或不采纳社区意见的技术理由</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="disagreementList">
+        <div class="disagreement-item">
+          <div class="item-header">
+            <span class="item-number">分歧点 #1</span>
+            <div class="item-actions">
+              <button class="btn btn-success btn-sm" onclick="toggleAccept(1)">采纳</button>
+              <button class="btn btn-danger btn-sm" onclick="toggleAccept(1, false)">不采纳</button>
+            </div>
+          </div>
+          <textarea id="disagreement1" class="inp inp-textarea" placeholder="社区报告中的分歧点描述..."></textarea>
+          <textarea id="response1" class="inp inp-textarea" placeholder="技术理由说明，解释采纳或不采纳该意见的原因..."></textarea>
+        </div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="addDisagreement()" style="align-self:flex-start;">+ 添加分歧点</button>
+    </div>
+  </div>
+
+  <!-- 否决权证据附件 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon red">⚠️</div>
+      <div>
+        <div class="card-title">四、否决权证据附件（预置）</div>
+        <div class="card-desc">若进入终极安全阀环节，此部分将呈堂</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="evidence-section">
+        <div class="evidence-warning">
+          ⚠️ 重要提示：此部分内容仅在启动否决流程时使用
+        </div>
+
+        <div class="form-row full-width" style="margin-bottom: 16px;">
+          <label>PoC 代码及复现环境</label>
+          <textarea id="pocCode" class="inp inp-textarea large" placeholder="粘贴 PoC 代码、部署脚本和复现步骤..."></textarea>
+        </div>
+
+        <div class="form-row full-width" style="margin-bottom: 16px;">
+          <label>Trace 交易追踪分析</label>
+          <textarea id="traceAnalysis" class="inp inp-textarea" placeholder="详细的交易追踪分析，包括调用链、状态变化等..."></textarea>
+        </div>
+
+        <div class="form-row full-width" style="margin-bottom: 16px;">
+          <label>与历史知名攻击事件的关联类比</label>
+          <textarea id="attackComparison" class="inp inp-textarea" placeholder="对比历史上类似的知名攻击事件，分析相似性和差异性..."></textarea>
+        </div>
+
+        <div class="checkbox-row">
+          <input type="checkbox" id="lossDeclaration">
+          <label for="lossDeclaration">我在此明确声明：本报告若按错误裁决发布，将导致用户资产直接损失</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 提交区域 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">📤</div>
+      <div>
+        <div class="card-title">提交报告</div>
+        <div class="card-desc">生成报告哈希并提交至链上</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="hashDisplay" style="display: none;">
+        <div style="font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 6px;">报告哈希（SHA-256）：</div>
+        <div class="code-block" id="reportHash">0x...</div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="fillSample()">📝 填写样例</button>
+        <button class="btn btn-primary" onclick="generateReport()">生成报告</button>
+        <button class="btn btn-success" onclick="previewReport()" id="previewBtn" disabled>预览报告</button>
+        <button class="btn btn-outline" onclick="submitReport()" id="submitBtn" disabled>提交报告</button>
+      </div>
+
+      <div id="submitResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- 报告预览区域 -->
+  <div class="card" id="previewCard" style="display: none;">
+    <div class="card-header">
+      <div class="card-icon purple">👁️</div>
+      <div>
+        <div class="card-title">报告预览</div>
+        <div class="card-desc">审计团队报告完整内容预览</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="report-preview" id="reportPreview"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  
+  let selectedRisk = '';
+  let reportData = {};
+  let disagreementCount = 1;
+  let reportHash = '';
+
+  function selectRisk(risk) {
+    selectedRisk = risk;
+    window.__selectedRisk = risk;
+    const options = document.querySelectorAll('.risk-option');
+    options.forEach(opt => opt.classList.remove('selected'));
+    const el = document.querySelector('.risk-option.' + risk);
+    if (el) el.classList.add('selected');
+  }
+
+  function addFindingRow() {
+    const tbody = $('findingsTableBody');
+    const idx = tbody.querySelectorAll('.finding-row').length + 1;
+    const row = document.createElement('tr');
+    row.className = 'finding-row';
+    row.innerHTML = `
+      <td><input class="inp inp-sm" style="width:70px;" placeholder="FT-${String(idx).padStart(3, '0')}"></td>
+      <td>
+        <select class="inp inp-sm severity-select" style="width:90px;">
+          <option value="Critical">高危</option>
+          <option value="High">高危</option>
+          <option value="Medium" selected>中危</option>
+          <option value="Low">低危</option>
+          <option value="Info">信息</option>
+        </select>
+      </td>
+      <td><input class="inp inp-sm" style="width:140px;" placeholder="合约名→函数名"></td>
+      <td><input class="inp inp-sm" style="width:110px;" placeholder="漏洞类型"></td>
+      <td><input class="inp inp-sm" style="flex:1;min-width:180px;" placeholder="漏洞描述..."></td>
+      <td>
+        <select class="inp inp-sm" style="width:80px;">
+          <option value="BLOCK">BLOCK</option>
+          <option value="PASS-WARN" selected>PASS-WARN</option>
+        </select>
+      </td>
+      <td><button class="btn btn-outline btn-sm" onclick="removeFindingRow(this)" title="删除">✕</button></td>
+    `;
+    tbody.appendChild(row);
+  }
+
+  function removeFindingRow(btn) {
+    const row = btn.closest('tr');
+    if (row && row.parentNode.querySelectorAll('.finding-row').length > 1) {
+      row.remove();
+    }
+  }
+
+  function collectFindings() {
+    const rows = document.querySelectorAll('#findingsTableBody .finding-row');
+    const findings = [];
+    rows.forEach(row => {
+      const inputs = row.querySelectorAll('input');
+      const selects = row.querySelectorAll('select');
+      const id = inputs[0]?.value?.trim();
+      if (id) {
+        findings.push({
+          id: id,
+          severity: selects[0]?.value || 'Medium',
+          location: inputs[1]?.value?.trim() || '',
+          vulnType: inputs[2]?.value?.trim() || '',
+          description: inputs[3]?.value?.trim() || '',
+          conclusion: selects[1]?.value || 'PASS-WARN'
+        });
+      }
+    });
+    return findings;
+  }
+
+  function addDisagreement() {
+    disagreementCount++;
+    const list = $('disagreementList');
+    const item = document.createElement('div');
+    item.className = 'disagreement-item';
+    item.innerHTML = `
+      <div class="item-header">
+        <span class="item-number">分歧点 #${disagreementCount}</span>
+        <div class="item-actions">
+          <button class="btn btn-success btn-sm" onclick="toggleAccept(${disagreementCount})">采纳</button>
+          <button class="btn btn-danger btn-sm" onclick="toggleAccept(${disagreementCount}, false)">不采纳</button>
+          <button class="btn btn-outline btn-sm" onclick="this.closest('.disagreement-item').remove(); disagreementCount--;">删除</button>
+        </div>
+      </div>
+      <textarea id="disagreement${disagreementCount}" class="inp inp-textarea" placeholder="社区报告中的分歧点描述..."></textarea>
+      <textarea id="response${disagreementCount}" class="inp inp-textarea" placeholder="技术理由说明..."></textarea>
+    `;
+    list.appendChild(item);
+  }
+
+  function toggleAccept(num, accept = true) {
+    const item = document.querySelector(`.disagreement-item:nth-child(${num})`);
+    if (!item) return;
+    const buttons = item.querySelectorAll('.item-actions .btn');
+    buttons[0].className = accept ? 'btn btn-success btn-sm' : 'btn btn-outline btn-sm';
+    buttons[1].className = accept ? 'btn btn-outline btn-sm' : 'btn btn-danger btn-sm';
+  }
+
+  function showPending(id, text) {
+    const el = $(id);
+    el.className = 'msg pending';
+    el.innerHTML = '<span class="spinner"></span> ' + text;
+  }
+
+  function showSuccess(id, text) {
+    const el = $(id);
+    el.className = 'msg success';
+    el.innerHTML = '<span style="flex-shrink:0;">✓</span> ' + text;
+  }
+
+  function showError(id, text) {
+    const el = $(id);
+    el.className = 'msg error';
+    el.innerHTML = '<span style="flex-shrink:0;">✗</span> ' + text;
+  }
+
+  function fillSample() {
+    $('proposalId').value = '1';
+    $('contractVersion').value = 'v1.0.0, commit: a1b2c3d4';
+    $('contractAddress').value = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+    $('codeHash').value = '0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+    selectRisk('medium');
+    $('riskExplanation').value = '该合约整体架构合理，但在权限控制与输入校验方面存在 3 个中级风险点。核心业务逻辑通过了功能验证，但在边界条件和异常处理上仍需加固。建议在修复中级风险后即可部署上线，同时持续监控低风险项的运行时表现。';
+    $('keyFindings').value = '1. 【所有权转移未校验零地址】合约的 transferOwnership 函数未检查 newOwner 是否为零地址，可能导致合约所有权永久丢失。风险等级：中危 (Medium)。\n2. 【整数下溢风险】withdraw 函数在更新用户余额时使用 -= 操作符，未充分验证余额充足性，存在整数下溢的潜在风险。风险等级：中危 (Medium)。\n3. 【访问控制粒度不足】管理员角色权限过于集中，缺乏多签机制和时间锁保护，单点故障风险较高。风险等级：中危 (Medium)。\n4. 【事件日志缺失】部分关键状态变更函数未发射事件，影响链下监控和可追溯性。风险等级：低危 (Low)。';
+    $('finalRecommendations').value = '1. 在 transferOwnership 函数中添加 require(newOwner != address(0), "Invalid address") 校验。\n2. 将 withdraw 函数中的 -= 操作改为先校验余额再更新的方式，或使用 SafeMath 库。\n3. 考虑引入多签钱包或 TimelockController 来分散管理员权限。\n4. 为所有状态变更函数添加事件发射。\n5. 建议在正式部署前进行一次第三方独立审计。';
+
+    const tbody = $('findingsTableBody');
+    tbody.innerHTML = '';
+    const findingsData = [
+      { id: 'FT-001', severity: 'Medium', location: 'Ownable.sol → transferOwnership', vulnType: '访问控制', description: '所有权转移未校验零地址，可能导致合约永久失控', conclusion: 'BLOCK' },
+      { id: 'FT-002', severity: 'Medium', location: 'Vault.sol → withdraw', vulnType: '整数溢出/下溢', description: 'withdraw 使用 -= 操作未充分校验余额，存在整数下溢风险', conclusion: 'BLOCK' },
+      { id: 'FT-003', severity: 'Medium', location: 'AccessControl.sol → grantRole', vulnType: '权限管理', description: '管理员权限过度集中，缺少多签和时间锁保护', conclusion: 'PASS-WARN' },
+      { id: 'FT-004', severity: 'Low', location: 'Vault.sol → deposit', vulnType: '事件缺失', description: 'deposit 函数未发射 Deposit 事件', conclusion: 'PASS-WARN' },
+      { id: 'FT-005', severity: 'Low', location: 'Token.sol → _mint', vulnType: 'Gas 优化', description: '循环操作未设置上限，可能导致 Gas 耗尽', conclusion: 'PASS-WARN' }
+    ];
+    findingsData.forEach((f, idx) => {
+      const row = document.createElement('tr');
+      row.className = 'finding-row';
+      row.innerHTML =
+        '<td><input class="inp inp-sm" style="width:70px;" value="' + f.id + '"></td>' +
+        '<td><select class="inp inp-sm severity-select" style="width:90px;">' +
+          '<option value="Critical"' + (f.severity === 'Critical' ? ' selected' : '') + '>高危</option>' +
+          '<option value="High"' + (f.severity === 'High' ? ' selected' : '') + '>高危</option>' +
+          '<option value="Medium"' + (f.severity === 'Medium' ? ' selected' : '') + '>中危</option>' +
+          '<option value="Low"' + (f.severity === 'Low' ? ' selected' : '') + '>低危</option>' +
+          '<option value="Info"' + (f.severity === 'Info' ? ' selected' : '') + '>信息</option>' +
+        '</select></td>' +
+        '<td><input class="inp inp-sm" style="width:140px;" value="' + f.location + '"></td>' +
+        '<td><input class="inp inp-sm" style="width:110px;" value="' + f.vulnType + '"></td>' +
+        '<td><input class="inp inp-sm" style="flex:1;min-width:180px;" value="' + f.description + '"></td>' +
+        '<td><select class="inp inp-sm" style="width:80px;">' +
+          '<option value="BLOCK"' + (f.conclusion === 'BLOCK' ? ' selected' : '') + '>BLOCK</option>' +
+          '<option value="PASS-WARN"' + (f.conclusion === 'PASS-WARN' ? ' selected' : '') + '>PASS-WARN</option>' +
+        '</select></td>' +
+        '<td><button class="btn btn-outline btn-sm" onclick="removeFindingRow(this)" title="删除">✕</button></td>';
+      tbody.appendChild(row);
+    });
+
+    $('disagreementList').innerHTML = '';
+    disagreementCount = 2;
+    const disagreementsHTML = [
+      { d: '社区报告认为 deposit 函数的权限检查存在缺陷，可能被绕过', r: '经团队复查，deposit 函数的 onlyOwner 修饰器已在编译时正确应用，且通过了全部 8 项权限测试。社区提出的绕过路径需要在特定编译器版本下才可能触发，当前使用的 Solidity 0.8.20 不受影响。因此不采纳此意见。' },
+      { d: '社区报告建议在合约中添加紧急暂停机制 (Circuit Breaker)', r: '采纳此建议。我们同意紧急暂停机制对于 DeFi 合约是重要的安全防护措施。已在修正版中添加 Pausable 继承和 whenNotPaused 修饰器，覆盖 deposit、withdraw 和 transfer 三个核心函数。感谢社区的宝贵建议。' }
+    ];
+    disagreementsHTML.forEach((item, idx) => {
+      const num = idx + 1;
+      const div = document.createElement('div');
+      div.className = 'disagreement-item';
+      div.innerHTML =
+        '<div class="item-header">' +
+          '<span class="item-number">分歧点 #' + num + '</span>' +
+          '<div class="item-actions">' +
+            '<button class="btn btn-success btn-sm" onclick="toggleAccept(' + num + ')">采纳</button>' +
+            '<button class="btn btn-danger btn-sm" onclick="toggleAccept(' + num + ', false)">不采纳</button>' +
+            '<button class="btn btn-outline btn-sm" onclick="this.closest(\'.disagreement-item\').remove(); disagreementCount--;">删除</button>' +
+          '</div>' +
+        '</div>' +
+        '<textarea id="disagreement' + num + '" class="inp inp-textarea" placeholder="社区报告中的分歧点描述...">' + item.d + '</textarea>' +
+        '<textarea id="response' + num + '" class="inp inp-textarea" placeholder="技术理由说明...">' + item.r + '</textarea>';
+      $('disagreementList').appendChild(div);
+    });
+
+    $('pocCode').value = '// PoC: transferOwnership 零地址攻击\ncontract AttackOwnership {\n    Vulnerable target;\n    constructor(address _target) {\n        target = Vulnerable(_target);\n    }\n    function exploit() external {\n        // 若未校验零地址，调用后合约所有权永久丢失\n        target.transferOwnership(address(0));\n    }\n}\n\n// 复现步骤:\n// 1. 部署 Vulnerable 合约\n// 2. 部署 AttackOwnership，传入 Vulnerable 地址\n// 3. 调用 exploit()\n// 4. 验证 owner 变为 address(0)';
+    $('traceAnalysis').value = '调用链分析 (withdraw 函数):\n1. User → Vault.withdraw(100)\n2. Vault.withdraw → balances[msg.sender] -= amount (未校验 balances[msg.sender] >= amount)\n3. 若 amount > balance，将发生整数下溢，balances[msg.sender] 变为极大值\n\n状态变化追踪:\n- 正常路径: balances[user] -= 100, user 收到 100 ETH\n- 攻击路径: balances[attacker] (初始 50) -= 100 → 下溢为 2²⁵⁶-50';
+    $('attackComparison').value = '类似事件参考:\n1. 2016年 The DAO 事件 - 重入攻击导致 360 万 ETH 被盗\n2. 2018年 BeautyChain (BEC) - 整数溢出导致代币价值归零\n3. 2022年 Wormhole 桥 - 签名验证绕过导致 3.26 亿美元损失\n\n本合约的整数下溢风险与 BEC 事件类似，但影响范围较小，仅涉及单个用户的余额操作。';
+    $('lossDeclaration').checked = true;
+
+    showSuccess('submitResult', '审计报告样例已填充，请根据实际情况修改！');
+  }
+
+  function generateReport() {
+    const pid = $('proposalId').value;
+    if (!pid || pid <= 0) {
+      alert('请先填写提案 ID');
+      $('proposalId').focus();
+      return;
+    }
+    
+    if (!selectedRisk && !window.__selectedRisk) {
+      alert('请选择风险评级');
+      return;
+    }
+
+    const riskLabels = {
+      'critical': '高危 (Critical) - 请勿上线',
+      'high': '高危 (High) - 需重大修复',
+      'medium': '中危 (Medium) - 建议修复',
+      'low': '低危 (Low) - 轻微问题',
+      'info': '信息提示 - 无安全风险'
+    };
+
+    const disagreements = [];
+    for (let i = 1; i <= disagreementCount; i++) {
+      const disagreement = $(`disagreement${i}`)?.value?.trim();
+      const response = $(`response${i}`)?.value?.trim();
+      if (disagreement) {
+        disagreements.push({ disagreement, response });
+      }
+    }
+
+    reportData = {
+      proposalId: $('proposalId').value,
+      contractVersion: $('contractVersion').value,
+      contractAddress: $('contractAddress').value,
+      codeHash: $('codeHash').value,
+      riskLevel: riskLabels[selectedRisk],
+      riskExplanation: $('riskExplanation').value,
+      keyFindings: $('keyFindings').value,
+      finalRecommendations: $('finalRecommendations').value,
+      findingsMatrix: collectFindings(),
+      disagreements: disagreements,
+      pocCode: $('pocCode').value,
+      traceAnalysis: $('traceAnalysis').value,
+      attackComparison: $('attackComparison').value,
+      lossDeclaration: $('lossDeclaration').checked,
+      generatedAt: new Date().toISOString(),
+      version: '1.0'
+    };
+
+    const reportJson = JSON.stringify(reportData, null, 2);
+    reportHash = '0x' + sha256(reportJson).toLowerCase();
+    
+    $('reportHash').textContent = reportHash;
+    $('hashDisplay').style.display = 'block';
+    $('previewBtn').disabled = false;
+    $('submitBtn').disabled = false;
+    
+    showSuccess('submitResult', '报告已生成，哈希计算完成！');
+  }
+
+  function previewReport() {
+    if (!reportHash) {
+      alert('请先生成报告');
+      return;
+    }
+
+    const riskLabels = {
+      'critical': '🔴 高危 (Critical) - 请勿上线',
+      'high': '🟠 高危 (High) - 需重大修复',
+      'medium': '🟡 中危 (Medium) - 建议修复',
+      'low': '🟢 低危 (Low) - 轻微问题',
+      'info': '🔵 信息提示 - 无安全风险'
+    };
+
+    let preview = `╔════════════════════════════════════════════════════════════════╗
+║              CreatDAO 审计团队报告                              ║
+╚════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【基本信息】
+  提案 ID: ${reportData.proposalId}
+  合约版本: ${reportData.contractVersion || '未指定'}
+  合约地址: ${reportData.contractAddress || '未提供'}
+  代码哈希: ${reportData.codeHash || '未提供'}
+  生成时间: ${new Date(reportData.generatedAt).toLocaleString('zh-CN')}
+  报告版本: ${reportData.version}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【一、核心结论函】
+
+  1. 最终风险评级
+  ────────────────────────────────────────────────────────────────
+  ${riskLabels[selectedRisk]}
+
+  2. 风险评级说明
+  ────────────────────────────────────────────────────────────────
+  ${reportData.riskExplanation || '(未填写)'}
+
+  3. 核心发现综述
+  ────────────────────────────────────────────────────────────────
+  ${reportData.keyFindings || '(未填写)'}
+
+  4. 最终建议
+  ────────────────────────────────────────────────────────────────
+  ${reportData.finalRecommendations || '(未填写)'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【二、审计发现矩阵】
+
+  ${reportData.findingsMatrix.length === 0 ? '  (无发现项记录)' :
+    '┌────────┬──────────┬──────────────────┬──────────────┬────────────────────────────┬───────────┐\n' +
+    '│   ID   │  严重程度 │      位置         │   漏洞类型    │          描述               │   结论    │\n' +
+    '├────────┼──────────┼──────────────────┼──────────────┼────────────────────────────┼───────────┤\n' +
+    reportData.findingsMatrix.map(f => {
+      const sevLabel = {Critical:'🔴高危', High:'🟠高危', Medium:'🟡中危', Low:'🟢低危', Info:'🔵信息'}[f.severity] || f.severity;
+      return `│ ${String(f.id).padEnd(6)} │ ${String(sevLabel).padEnd(6)} │ ${String(f.location).padEnd(16)} │ ${String(f.vulnType).padEnd(12)} │ ${String(f.description).padEnd(26)} │ ${String(f.conclusion).padEnd(9)} │`;
+    }).join('\n') + '\n' +
+    '└────────┴──────────┴──────────────────┴──────────────┴────────────────────────────┴───────────┘'
+  }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【三、对齐意见书】
+
+  ${reportData.disagreements.length === 0 ? '  (无分歧点记录)' : 
+    reportData.disagreements.map((d, i) => `
+  ${i + 1}. 分歧点:
+     ${d.disagreement}
+
+     技术回应:
+     ${d.response || '(未填写)'}
+`).join('\n')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【四、否决权证据附件（预置）】
+
+  ${reportData.pocCode || reportData.traceAnalysis || reportData.attackComparison ? `
+  1. PoC 代码及复现环境
+  ────────────────────────────────────────────────────────────────
+  ${reportData.pocCode ? '[已填写]' : '[未填写]'}
+
+  2. Trace 交易追踪分析
+  ────────────────────────────────────────────────────────────────
+  ${reportData.traceAnalysis ? '[已填写]' : '[未填写]'}
+
+  3. 与历史知名攻击事件的关联类比
+  ────────────────────────────────────────────────────────────────
+  ${reportData.attackComparison ? '[已填写]' : '[未填写]'}
+
+  4. 资产损失声明
+  ────────────────────────────────────────────────────────────────
+  ${reportData.lossDeclaration ? '✓ 已确认声明' : '✗ 未声明'}
+` : '  (未填写否决权证据)'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【报告哈希】
+  SHA-256: ${reportHash}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ 审计团队声明：本报告具有权威性，保证可追溯性和可裁决性。
+`;
+
+    $('reportPreview').textContent = preview;
+    $('previewCard').style.display = 'block';
+    
+    $('previewCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function submitReport() {
+    if (!reportHash) {
+      alert('请先生成报告');
+      return;
+    }
+
+    const proposalId = reportData.proposalId;
+    if (!proposalId || proposalId <= 0) {
+      alert('提案 ID 无效');
+      return;
+    }
+
+    const confirmSubmit = confirm(`确认提交审计报告到提案 #${proposalId} 吗？\n\n报告哈希: ${reportHash}\n\n提交后将无法修改，请确认提案ID正确。`);
+    if (!confirmSubmit) {
+      return;
+    }
+
+    if (!window.ethereum) {
+      alert('请安装 MetaMask 浏览器扩展');
+      return;
+    }
+
+    try {
+      var ok2 = await Wallet.connect();
+      if (!ok2) return;
+      const signer = Wallet.getSigner();
+
+
+
+
+      showPending('submitResult', `正在提交报告到提案 #${proposalId}...`);
+
+      const tx = await Wallet.getContracts().auditDAO.submitTeamReport(proposalId, reportHash);
+      await tx.wait();
+
+      showSuccess('submitResult', `报告提交成功！提案 ID: ${proposalId} | 交易哈希: ${tx.hash}`);
+      
+    } catch (e) {
+      if (e.code === 4001 || (e.message && e.message.toLowerCase().includes('user rejected'))) {
+        showError('submitResult', '已取消操作');
+      } else {
+        showContractError('submitResult', e);
+      }
+    }
+  }
+
+  Wallet.registerEvents();
+  Wallet.autoConnect();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+{
+  "audit_id": "AUD-20250321-001",
+  "code_hash": "0xcb4df179249f5638ddf2b52ebdf271b7eacc08bbf5e5713d58f8ac60a6fd0be9",
+  "report_content": {
+    "task_info": {
+      "audit_id": "AUD-20250321-001",
+      "code_hash": "0xcb4df179249f5638ddf2b52ebdf271b7eacc08bbf5e5713d58f8ac60a6fd0be9"
+    },
+    "execution_summary": {
+      "ai_engine": "DeepSeek-V4",
+      "tools": "DeepSeek AI 静态分析引擎",
+      "coverage": "SWC-101 整数溢出, SWC-102 整数下溢, SWC-103 浮点精度, SWC-104 未检查返回值, SWC-105 未保护自毁, SWC-106 未保护升级, SWC-107 重入攻击, SWC-108 默认可见性, SWC-109 未初始化存储指针, SWC-110 断言违规, SWC-111 使用tx.origin, SWC-112 委托调用注入, SWC-113 DoS攻击, SWC-114 交易顺序依赖, SWC-115 时间戳依赖, SWC-116 区块哈希依赖, SWC-117 签名重放, SWC-118 错误的构造函数名, SWC-119 影子状态变量, SWC-120 弱随机性, SWC-121 缺少防护措施, SWC-122 存储碰撞, SWC-123 要求违规, SWC-124 写入任意存储位置, SWC-125 越界写入, SWC-126 越界读取, SWC-127 任意跳转, SWC-128 函数选择器碰撞, SWC-129 类型不安全, SWC-130 ABI编码/解码漏洞, SWC-131 未初始化存储状态, SWC-132 重入防护缺失, SWC-133 前端运行, SWC-134 预言机操纵, SWC-135 闪电贷攻击, SWC-136 未检查返回值",
+      "timestamp": "2025-03-21T12:00:00Z"
+    },
+    "findings": [
+      {
+        "id": "AI-001",
+        "severity": "高危",
+        "location": "CeatToken.sol → Ceattoken → buyCEAT → 行号区间: 36-42",
+        "vuln_type": "SWC-113 DoS攻击（未限制铸币）",
+        "description": "buyCEAT函数允许任意用户通过发送ETH无限铸币，没有铸币上限或供应量限制。攻击者可以大量铸币导致代币通胀，稀释其他持有者价值，并可能耗尽合约ETH余额。",
+        "conclusion": "BLOCK"
+      },
+      {
+        "id": "AI-002",
+        "severity": "高危",
+        "location": "CeatToken.sol → Ceattoken → withdrawETH → 行号区间: 52-57",
+        "vuln_type": "SWC-104 未检查返回值（transfer）",
+        "description": "withdrawETH函数使用transfer发送ETH，但未检查返回值。如果接收方是合约且拒绝接收，转账会失败但不会回滚交易，导致ETH永久锁定在合约中。",
+        "conclusion": "BLOCK"
+      },
+      {
+        "id": "AI-003",
+        "severity": "中危",
+        "location": "CeatToken.sol → Ceattoken → buyCEAT → 行号区间: 36-42",
+        "vuln_type": "SWC-133 前端运行",
+        "description": "buyCEAT函数依赖可变的ethToCeatRate，攻击者可以通过监控mempool中的setExchangeRate交易，在兑换率更新前或后抢跑交易，获取不公平优势。",
+        "conclusion": "PASS-WARN"
+      },
+      {
+        "id": "AI-004",
+        "severity": "低危",
+        "location": "CeatToken.sol → Ceattoken → constructor → 行号区间: 28-31",
+        "vuln_type": "SWC-118 错误的构造函数名",
+        "description": "合约名定义为Ceattoken（小写t），但ERC20标准构造函数使用CeatToken（大写T），可能导致部署时名称不一致。",
+        "conclusion": "PASS-WARN"
+      }
+    ],
+    "final_verdict": {
+      "overall_conclusion": "BLOCK",
+      "pass_timestamp": "2025-03-21T12:00:00Z",
+      "report_hash": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+    },
+    "matrix_interface": {
+      "matrix_mapping": {},
+      "report_permalink": "暂未上链"
+    }
+  },
+  "created_at": "2026-06-25T12:16:57.282418+00:00"
+}

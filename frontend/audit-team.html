@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CreatDAO - 审计团队端</title>
+  <link rel="stylesheet" href="common.css?v=2">
+  <script src="lib/ethers.min.js?v=2"></script>
+  <script src="lib/axios.min.js?v=2"></script>
+  <script src="common.js?v=2"></script>
+  <script src="config.js?v=4"></script>
+  <script src="contract.js?v=6"></script>
+  <script src="wallet.js?v=3"></script>
+  <style>
+.status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 16px; font-size: 11px; font-weight: 600; }
+.status-pill.available { background: rgba(33,150,243,0.12); color: #90caf9; border: 1px solid rgba(33,150,243,0.2); }
+.status-pill.claimed { background: rgba(156,39,176,0.12); color: #ce93d8; border: 1px solid rgba(156,39,176,0.2); }
+.status-pill.reviewing { background: rgba(255,152,0,0.12); color: #ffcc80; border: 1px solid rgba(255,152,0,0.2); }
+.status-pill.finalized { background: rgba(76,175,80,0.12); color: #81c784; border: 1px solid rgba(76,175,80,0.2); }
+.team-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.team-stat-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 14px; text-align: center; transition: all 0.3s ease; }
+.team-stat-card:hover { border-color: rgba(102,126,234,0.2); transform: translateY(-1px); }
+.team-stat-card .ts-num { font-size: 26px; font-weight: 700; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.team-stat-card .ts-lbl { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 2px; text-transform: uppercase; }
+.audit-list-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 10px; margin-bottom: 6px; transition: all 0.25s ease; }
+.audit-list-item:hover { background: rgba(255,255,255,0.05); border-color: rgba(76,175,80,0.2); transform: translateX(3px); }
+.quick-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-secondary { background: linear-gradient(135deg, #00bcd4, #00838f); color: #fff; }
+.btn-secondary:hover { box-shadow: 0 4px 16px rgba(0, 188, 212, 0.4); transform: translateY(-1px); }
+.inp-addr { width: 380px; max-width: 100%; }
+  </style>
+</head>
+<body>
+<div class="app-container">
+
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">&#x1F6E1;</div>
+      <div class="title">
+        <h1>审计团队端</h1>
+        <span>CreatDAO Audit Team Panel</span>
+      </div>
+    </div>
+    <div class="wallet-area">
+      <span class="wallet-status" id="walletStatus">
+        <span class="dot-indicator disconnected"></span> 未连接
+      </span>
+      <button class="btn btn-primary" id="connectBtn" onclick="connectWallet()">连接钱包</button>
+      <button class="btn btn-outline btn-sm" onclick="window.location.href='home.html'">返回主页面</button>
+    </div>
+  </header>
+
+  <div class="panel-header">
+    <p>提交审计报告需要 auditTeam 权限；否决提案需要多签成员</p>
+  </div>
+
+  <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+    <button class="btn btn-success" onclick="goToReportWriting()">
+      <span class="icon">📝</span> 审计报告编写
+    </button>
+  </div>
+
+  <!-- Submit Audit Report -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon orange">&#128196;</div>
+      <div>
+        <div class="card-title">提交审计报告</div>
+        <div class="card-desc">仅限 auditTeam 地址调用</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>提案 ID</label>
+        <input id="reportProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+        <label style="min-width:auto;">报告哈希</label>
+        <input id="reportHash" class="inp inp-hash" type="text" placeholder="0x..." size="66">
+        <button class="btn btn-primary btn-sm" onclick="submitTeamReport()">提交报告</button>
+      </div>
+      <div id="reportResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- Available Proposals -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon green">&#128190;</div>
+      <div>
+        <div class="card-title">待接取提案</div>
+        <div class="card-desc">查看所有处于 Submitted 状态、等待审计团队接取的提案</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <button class="btn btn-outline btn-sm" onclick="loadAvailableProposals()" style="align-self:flex-start; margin-bottom:10px;">刷新列表</button>
+      <div id="availableProposalsList" style="display: flex; flex-direction: column; gap:12px;">
+        <div style="padding:20px; text-align:center; color:rgba(255,255,255,0.5);">点击刷新加载待接取提案</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Propose Veto -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon red">&#9888;</div>
+      <div>
+        <div class="card-title">发起否决提案</div>
+        <div class="card-desc">审计团队发起否决，需提供证据链接</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>审计提案 ID</label>
+        <input id="vetoAuditProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+        <label style="min-width:auto;">证据链接</label>
+        <input id="vetoEvidence" class="inp inp-wide" type="text" placeholder="IPFS 或 URL 链接">
+        <button class="btn btn-danger btn-sm" onclick="proposeVeto()">发起否决</button>
+      </div>
+      <div id="vetoProposeResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- Confirm Veto -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon cyan">&#10004;</div>
+      <div>
+        <div class="card-title">确认否决提案</div>
+        <div class="card-desc">委员会成员确认或反对否决提案</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>审计提案 ID</label>
+        <input id="vetoProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+        <label style="display:flex;align-items:center;gap:6px;min-width:auto;">
+          <input type="checkbox" id="vetoSupportVeto" checked> 支持否决
+        </label>
+        <button class="btn btn-primary btn-sm" onclick="confirmVeto()">确认否决</button>
+      </div>
+      <div id="vetoConfirmResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- View Veto Details -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">&#128214;</div>
+      <div>
+        <div class="card-title">查看否决提案详情</div>
+        <div class="card-desc">查询提案的否决状态及完整信息</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>审计提案 ID</label>
+        <input id="viewVetoId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+        <button class="btn btn-outline btn-sm" onclick="viewVetoProposal()">查看</button>
+      </div>
+      <pre id="vetoDetails" class="code-block">点击查看按钮获取数据</pre>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const BACKEND_API = CONFIG.API_BASE;
+  const PROPOSAL_STATUS = CONFIG.PROPOSAL_STATUS;
+
+  async function connectWallet() {
+    const btn = document.getElementById('connectBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 连接中...';
+    try {
+      await Wallet.connect();
+      await checkAccessPermission();
+      btn.textContent = '已连接';
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = '连接钱包';
+      alert('连接钱包失败: ' + e.message);
+    }
+  }
+
+  async function checkAccessPermission() {
+    if (!Wallet.getSigner() || !Wallet.getAddress()) return;
+
+    try {
+      let roles;
+      try {
+        const res = await fetch(BACKEND_API + '/contract/roles?address=' + encodeURIComponent(Wallet.getAddress()));
+        roles = await res.json();
+      } catch (e) {
+        console.error('获取合约角色失败:', e);
+        alert('❌ 无法获取合约角色信息，请稍后重试');
+        return;
+      }
+
+      if (roles.source === 'fallback') {
+        alert('❌ 无法连接合约网络，请稍后重试');
+        return;
+      }
+
+      const isOwner = roles.owner && roles.owner.toLowerCase() === Wallet.getAddress().toLowerCase();
+      if (isOwner) {
+        return;
+      }
+
+      const isAuditTeam = roles.audit_team && roles.audit_team.toLowerCase() === Wallet.getAddress().toLowerCase();
+      if (isAuditTeam) {
+        return;
+      }
+
+      alert('❌ 无权限访问审计团队端！\n\n只有以下角色可以访问：\n• Owner: ' + (roles.owner || '未知') + '\n• 审计团队: ' + (roles.audit_team || '未知') + '\n\n即将跳转到主页面...');
+      window.location.href = 'home.html';
+    } catch (e) {
+      alert('获取权限信息失败: ' + e.message);
+    }
+  }
+
+  async function submitTeamReport() {
+    if (!Wallet.getSigner()) return alert("请先连接钱包");
+    const pid = document.getElementById("reportProposalId").value;
+    const hash = document.getElementById("reportHash").value.trim();
+    if (!hash) return alert("请输入报告哈希");
+    try {
+      document.getElementById("reportResult").className = 'msg pending';
+      document.getElementById("reportResult").innerHTML = '正在提交...';
+      const tx = await Wallet.getContracts().auditDAO.submitTeamReport(pid, hash);
+      await tx.wait();
+      document.getElementById("reportResult").className = 'msg success';
+      document.getElementById("reportResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 报告已提交 (提案' + pid + ')';
+    } catch (e) { showContractError("reportResult", e); }
+  }
+
+  async function proposeVeto() {
+    if (!Wallet.getSigner()) return alert("请先连接钱包");
+    const auditPid = document.getElementById("vetoAuditProposalId").value;
+    const evidence = document.getElementById("vetoEvidence").value.trim();
+    if (!evidence) return alert("请输入证据链接");
+    const el = document.getElementById("vetoProposeResult");
+    try {
+      el.className = 'msg pending';
+      el.innerHTML = '<span class="spinner"></span> 正在检查提案状态...';
+
+      const p = await Wallet.getContracts().auditDAO.getProposalSummary(auditPid);
+      const status = PROPOSAL_STATUS[p.status] || ('Unknown(' + p.status + ')');
+      if (p.status !== 6 && p.status !== 7) {
+        el.className = 'msg error';
+        el.innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 提案状态不符：当前为 <b>' + status + '</b>，否决只能在 <b>CommitteeRuling</b>(6) 或 <b>Arbitration</b>(7) 阶段发起';
+        return;
+      }
+      if (p.vetoRequested) {
+        el.className = 'msg error';
+        el.innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 否决已发起，请勿重复操作';
+        return;
+      }
+
+      el.innerHTML = '<span class="spinner"></span> 正在发起否决...';
+      const tx = await Wallet.getContracts().auditDAO.initiateVeto(auditPid, evidence);
+      await tx.wait();
+      el.className = 'msg success';
+      el.innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 否决提案已发起，审计提案 ID: ' + auditPid + '，状态已转为 VetoReview';
+    } catch (e) { showContractError("vetoProposeResult", e); }
+  }
+
+  async function confirmVeto() {
+    if (!Wallet.getSigner()) return alert("请先连接钱包");
+    const proposalId = document.getElementById("vetoProposalId").value;
+    const supportVeto = document.getElementById("vetoSupportVeto").checked;
+    const el = document.getElementById("vetoConfirmResult");
+    try {
+      el.className = 'msg pending';
+      el.innerHTML = '<span class="spinner"></span> 正在检查权限和提案状态...';
+
+      const isMember = await Wallet.getContracts().auditDAO.isCommitteeMember(Wallet.getAddress());
+      if (!isMember) {
+        el.className = 'msg error';
+        el.innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 您不是争议委员会成员，无法确认否决。请使用委员会成员账户或在管理端设置委员会成员。';
+        return;
+      }
+
+      const p = await Wallet.getContracts().auditDAO.getProposalSummary(proposalId);
+      const status = PROPOSAL_STATUS[p.status] || ('Unknown(' + p.status + ')');
+      if (p.status !== 8) {
+        el.className = 'msg error';
+        el.innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 提案状态不符：当前为 <b>' + status + '</b>，确认否决只能在 <b>VetoReview</b>(8) 阶段进行';
+        return;
+      }
+      if (!p.vetoRequested) {
+        el.className = 'msg error';
+        el.innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 该提案尚未发起否决，请先由审计团队发起否决';
+        return;
+      }
+
+      el.innerHTML = '<span class="spinner"></span> 正在确认...';
+      const tx = await Wallet.getContracts().auditDAO.committeeReviewVeto(proposalId, supportVeto);
+      await tx.wait();
+      el.className = 'msg success';
+      el.innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 已' + (supportVeto ? '支持' : '反对') + '否决提案 ' + proposalId;
+    } catch (e) { showContractError("vetoConfirmResult", e); }
+  }
+
+  async function viewVetoProposal() {
+    if (!Wallet.getSigner()) return alert("请先连接钱包");
+    const proposalId = document.getElementById("viewVetoId").value;
+    try {
+      const p = await Wallet.getContracts().auditDAO.getProposalSummary(proposalId);
+      const details = {
+        proposalId: p.id.toString(),
+        status: PROPOSAL_STATUS[p.status] || ('Unknown(' + p.status + ')'),
+        vetoRequested: p.vetoRequested,
+        vetoApproved: p.vetoApproved,
+        riskLevel: ['None','Low','Medium','High','Critical'][p.riskLevel],
+        codeHash: p.codeHash,
+        createdAt: new Date(p.createdAt.toNumber() * 1000).toLocaleString('zh-CN')
+      };
+      document.getElementById("vetoDetails").innerText = JSON.stringify(details, null, 2);
+    } catch (e) {
+      document.getElementById("vetoDetails").innerText = '查询失败: ' + e.message;
+    }
+  }
+
+  Wallet.registerEvents();
+  Wallet.autoConnect();
+
+  async function loadAvailableProposals() {
+    const container = document.getElementById("availableProposalsList");
+    container.innerHTML = '<div style="padding:20px; text-align:center; color:rgba(255,255,255,0.5);">加载中...</div>';
+
+    try {
+      const response = await axios.get(`${BACKEND_API}/audit-team/available-proposals`);
+      const proposals = response.data;
+
+      if (!proposals || proposals.length === 0) {
+        container.innerHTML = '<div style="padding:20px; text-align:center; color:rgba(255,255,255,0.5);">暂无待接取的提案</div>';
+        return;
+      }
+
+      let html = '';
+      for (let proposal of proposals) {
+        const codeHash = proposal.code_hash || 'N/A';
+        const hashDisplay = codeHash.length > 16 ? codeHash.substring(0, 16) + '...' : codeHash;
+        const createdAt = proposal.created_at ? new Date(proposal.created_at).toLocaleString('zh-CN') : '未知';
+
+        html += `
+          <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+              <div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:18px; font-weight:700; color:#fff;">提案 #${proposal.proposal_id}</span>
+                  <span style="font-size:12px; background:rgba(76,175,80,0.2); color:#81c784; padding:2px 8px; border-radius:4px;">${proposal.status}</span>
+                </div>
+                <div style="font-size:12px; color:rgba(255,255,255,0.5); margin-top:4px;">${createdAt}</div>
+              </div>
+              <button class="btn btn-primary btn-sm" data-pid="${proposal.proposal_id}" onclick="claimProposal(${proposal.proposal_id})">接取提案</button>
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:12px; color:rgba(255,255,255,0.5); margin-bottom:4px;">代码哈希</div>
+              <div style="font-family:monospace; font-size:13px; color:#60a5fa;">0x${hashDisplay}</div>
+            </div>
+            ${proposal.description ? `<div style="font-size:13px; color:rgba(255,255,255,0.7); line-height:1.4;">${proposal.description}</div>` : ''}
+          </div>
+        `;
+      }
+      container.innerHTML = html;
+    } catch (e) {
+      console.error("加载待接取提案失败:", e);
+      let errorMsg = e.response?.data?.detail || e.message || "加载失败";
+      if (errorMsg.length > 100) {
+        errorMsg = "后端接口调用失败";
+      }
+      container.innerHTML = `<div class="msg error" style="margin:0;"><span style="flex-shrink:0;">&#10060;</span> ${errorMsg}</div>`;
+    }
+  }
+
+  async function claimProposal(proposalId) {
+    if (!Wallet.getSigner()) return alert("请先连接钱包");
+
+    if (!confirm(`确定要接取提案 #${proposalId} 吗？\n\n接取后您将负责审计此提案并提交审计报告。`)) {
+      return;
+    }
+
+    const container = document.getElementById("availableProposalsList");
+    const btn = document.querySelector(`button[data-pid="${proposalId}"]`);
+    if (!btn) return alert('找不到对应按钮');
+    const originalText = btn.innerText;
+    btn.innerText = '处理中...';
+    btn.disabled = true;
+
+    try {
+      const response = await axios.post(`${BACKEND_API}/audit-team/claim-proposal`, {
+        proposal_id: proposalId
+      });
+
+      if (response.data.status === "success") {
+        btn.innerText = '已接取';
+        btn.className = 'btn btn-success btn-sm';
+        btn.disabled = true;
+        alert(`提案 #${proposalId} 已成功接取！\n\n现在您可以提交审计报告。`);
+      } else {
+        btn.innerText = originalText;
+        btn.disabled = false;
+        alert("接取提案失败: " + (response.data.detail || "未知错误"));
+      }
+    } catch (e) {
+      btn.innerText = originalText;
+      btn.disabled = false;
+      alert("接取提案失败: " + (e.response?.data?.detail || e.message));
+    }
+  }
+
+  function goToReportWriting() {
+    window.location.href = 'report-writing.html';
+  }
+</script>
+</body>
+</html>

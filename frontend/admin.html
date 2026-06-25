@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CreatDAO - 管理端</title>
+  <link rel="stylesheet" href="common.css?v=2">
+  <script src="lib/ethers.min.js?v=2"></script>
+  <script src="lib/axios.min.js?v=2"></script>
+  <script src="common.js?v=2"></script>
+  <script src="config.js?v=4"></script>
+  <script src="contract.js?v=6"></script>
+  <script src="wallet.js?v=3"></script>
+
+</head>
+<body>
+<div class="app-container">
+
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">&#9881;</div>
+      <div class="title">
+        <h1>管理端</h1>
+        <span>CreatDAO Admin Panel</span>
+      </div>
+    </div>
+    <div class="wallet-area">
+      <span class="wallet-status" id="walletStatus">
+        <span class="dot-indicator disconnected"></span> 未连接
+      </span>
+      <button class="btn btn-primary" id="connectBtn" onclick="connectWallet()">连接钱包</button>
+      <button class="btn btn-outline btn-sm" onclick="window.location.href='home.html'">返回主页面</button>
+    </div>
+  </header>
+
+  <div class="panel-header">
+    <p>请使用管理员账户 (owner) 连接</p>
+  </div>
+
+  <!-- Create Proposal -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">&#43;</div>
+      <div>
+        <div class="card-title">创建审计提案 <span style="font-size:12px;color:#888;background:#f0f0f0;padding:2px 8px;border-radius:10px;font-weight:normal;">手动创建</span></div>
+        <div class="card-desc">创建审计提案，需提供代码 IPFS 哈希</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>代码哈希</label>
+        <input id="codeHash" class="inp inp-hash" type="text" placeholder="0x..." size="66">
+        <button class="btn btn-primary btn-sm" onclick="submitProposal()">提交提案</button>
+      </div>
+      <div id="proposalResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- Voting Actions -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon orange">&#9654;</div>
+      <div>
+        <div class="card-title">控制投票</div>
+        <div class="card-desc">设置投票时间并开启或结束提案投票</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>提案 ID</label>
+        <input id="votingProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+      </div>
+      <div class="form-row">
+        <label>开始时间</label>
+        <input id="votingStartTime" class="inp inp-sm" type="datetime-local" placeholder="选择开始时间">
+        <button class="btn btn-outline btn-sm" onclick="setStartTimeNow()">设为现在</button>
+      </div>
+      <div class="form-row">
+        <label>结束时间</label>
+        <input id="votingEndTime" class="inp inp-sm" type="datetime-local" placeholder="选择结束时间">
+        <button class="btn btn-outline btn-sm" onclick="setEndTimeFromNow()">设置为7天后</button>
+      </div>
+      <div class="form-row">
+        <button class="btn btn-success btn-sm" onclick="startVoting()">开启投票</button>
+        <span style="font-size:12px; color:rgba(255,255,255,0.45);">设置投票时间，到结束时间自动结束</span>
+      </div>
+      <div id="votingResult" class="msg"></div>
+      <div class="divider"></div>
+      <div class="form-row">
+        <label>提案 ID</label>
+        <input id="finalizeProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+        <button class="btn btn-danger btn-sm" onclick="finalizeVoting()">提前结束投票</button>
+      </div>
+      <div style="font-size:12px; color:rgba(255,255,255,0.4); margin-top: 6px;">
+        <span style="color:#ffcc80;">⚠️</span> 需为管理员地址调用
+      </div>
+      <div id="finalizeResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- Configuration -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon cyan">&#9881;</div>
+      <div>
+        <div class="card-title">合约参数配置</div>
+      <div class="card-desc">更新审计团队、所有权等参数</div>
+    </div>
+  </div>
+  <div class="card-body">
+    <div style="background:rgba(0,0,0,0.3); border-radius:8px; padding:12px; margin-bottom:16px; font-size:12px;">
+      <div style="margin-bottom:8px;"><strong>📋 合约地址:</strong> <span id="debugContractAddr" style="font-family:monospace;"></span></div>
+      <div style="margin-bottom:8px;"><strong>🌐 网络 ID:</strong> <span id="debugNetworkId"></span></div>
+      <div style="margin-bottom:8px;"><strong>👤 连接地址:</strong> <span id="debugConnectedAddr" style="font-family:monospace;"></span></div>
+      <button class="btn btn-outline btn-sm" onclick="refreshDebugInfo()" style="margin-top:8px;">刷新调试信息</button>
+    </div>
+    
+    <div class="form-row">
+      <label>设置审计团队</label>
+      <input id="newAuditTeam" class="inp inp-addr" type="text" placeholder="0x...">
+      <button class="btn btn-primary btn-sm" onclick="setAuditTeam()">设置</button>
+    </div>
+    <div id="auditTeamResult" class="msg"></div>
+    <div class="divider"></div>
+    <div class="form-row">
+      <label>检查/转移所有权</label>
+      <input id="newOwner" class="inp inp-addr" type="text" placeholder="0x..." value="0xE3bdE49dA9E2506398Dc3600f65e082C54408048">
+      <button class="btn btn-outline btn-sm" onclick="checkOwnerStatus()">检查状态</button>
+      <button class="btn btn-danger btn-sm" onclick="transferOwnership()">转移</button>
+    </div>
+    <div id="ownershipResult" class="msg"></div>
+  </div>
+</div>
+
+  <!-- Create Audit Team -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon cyan">&#128295;</div>
+      <div>
+        <div class="card-title">注册审计团队</div>
+        <div class="card-desc">注册已部署的审计团队合约（至少2名成员）</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row" style="margin-bottom:8px;">
+        <label>团队名称</label>
+        <input id="auditTeamName" class="inp" type="text" placeholder="例如：Security Guardians">
+      </div>
+      <div class="form-row" style="margin-bottom:8px;">
+        <label>团队合约地址</label>
+        <input id="auditTeamContract" class="inp inp-addr" type="text" placeholder="0x...">
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
+        <input id="auditTeamMember1" class="inp inp-addr" type="text" placeholder="成员地址 1 *">
+        <input id="auditTeamMember2" class="inp inp-addr" type="text" placeholder="成员地址 2 *">
+        <input id="auditTeamMember3" class="inp inp-addr" type="text" placeholder="成员地址 3 (可选)">
+        <input id="auditTeamMember4" class="inp inp-addr" type="text" placeholder="成员地址 4 (可选)">
+        <input id="auditTeamMember5" class="inp inp-addr" type="text" placeholder="成员地址 5 (可选)">
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="registerAuditTeam()" style="align-self:flex-start;">注册审计团队</button>
+      <div id="createAuditTeamResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- Audit Teams List -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon green">&#128100;</div>
+      <div>
+        <div class="card-title">审计团队列表</div>
+        <div class="card-desc">查看所有活跃审计团队的信息和统计</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <button class="btn btn-outline btn-sm" onclick="loadAuditTeams()" style="align-self:flex-start; margin-bottom:10px;">刷新团队列表</button>
+      <div id="auditTeamsList" style="display: flex; flex-direction: column; gap:12px;"></div>
+    </div>
+  </div>
+
+  <!-- Committee -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon green">&#128101;</div>
+      <div>
+        <div class="card-title">设置争议委员会</div>
+        <div class="card-desc">输入5个委员会成员地址</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
+        <input id="committeeMember1" class="inp inp-addr" type="text" placeholder="成员地址 1">
+        <input id="committeeMember2" class="inp inp-addr" type="text" placeholder="成员地址 2">
+        <input id="committeeMember3" class="inp inp-addr" type="text" placeholder="成员地址 3">
+        <input id="committeeMember4" class="inp inp-addr" type="text" placeholder="成员地址 4">
+        <input id="committeeMember5" class="inp inp-addr" type="text" placeholder="成员地址 5">
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="setCommittee()" style="align-self:flex-start;">提交委员会</button>
+      <div id="committeeResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- Committee Reward Penalty -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon orange">&#9733;</div>
+      <div>
+        <div class="card-title">设置争议委员奖励与惩罚</div>
+        <div class="card-desc">设置委员会成员正确投票的奖励率和错误投票的惩罚率（basis points）</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>奖励率</label>
+        <input id="committeeRewardRate" class="inp inp-sm inp-num" type="number" placeholder="1000=10%" value="1000">
+        <label style="min-width:auto;">惩罚率</label>
+        <input id="committeePenaltyRate" class="inp inp-sm inp-num" type="number" placeholder="500=5%" value="500">
+        <button class="btn btn-outline btn-sm" onclick="setCommitteeRewardPenalty()">设置</button>
+      </div>
+      <div id="committeeRewardPenaltyResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- Contract Params Config -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">⚙️</div>
+      <div>
+        <div class="card-title">合约参数配置</div>
+        <div class="card-desc">配置质押门槛、投票奖惩率、仲裁押金、争议保留期</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>最低质押量</label>
+        <input id="minStakeAmount" class="inp inp-sm inp-num" type="number" placeholder="CEAT" value="500">
+        <button class="btn btn-outline btn-sm" onclick="setMinStakeAmount()">设置</button>
+      </div>
+      <div class="form-row">
+        <label>投票奖励率</label>
+        <input id="voteRewardRate" class="inp inp-sm inp-num" type="number" placeholder="800=8%" value="800">
+        <label style="min-width:auto;">惩罚率</label>
+        <input id="votePenaltyRate" class="inp inp-sm inp-num" type="number" placeholder="400=4%" value="400">
+        <button class="btn btn-outline btn-sm" onclick="setVoteRewardPenalty()">设置</button>
+      </div>
+      <div class="form-row">
+        <label>仲裁押金</label>
+        <input id="minArbitrationDeposit" class="inp inp-sm inp-num" type="number" placeholder="CEAT" value="1000">
+        <button class="btn btn-outline btn-sm" onclick="setMinArbitrationDeposit()">设置</button>
+      </div>
+      <div class="form-row">
+        <label>争议保留期(天)</label>
+        <input id="disputeRetentionPeriod" class="inp inp-sm inp-num" type="number" placeholder="天" value="3">
+        <button class="btn btn-outline btn-sm" onclick="setDisputeRetentionPeriod()">设置</button>
+      </div>
+      <div id="contractParamsResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- Rewards & Slash -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon red">&#9733;</div>
+      <div>
+        <div class="card-title">奖励与惩罚</div>
+        <div class="card-desc">分配奖励或扣除质押</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>奖励接收</label>
+        <input id="rewardRecipient" class="inp inp-addr" type="text" placeholder="0x...">
+        <input id="rewardAmount" class="inp inp-sm inp-num" type="text" placeholder="数量" value="10">
+        <button class="btn btn-success btn-sm" onclick="allocateReward()">分配</button>
+      </div>
+      <div id="rewardResult" class="msg"></div>
+      <div class="divider"></div>
+      <div class="form-row">
+        <label>扣除地址</label>
+        <input id="slashAddress" class="inp inp-addr" type="text" placeholder="0x...">
+        <input id="slashAmount" class="inp inp-sm inp-num" type="text" placeholder="数量" value="10">
+        <button class="btn btn-danger btn-sm" onclick="slashStake()">扣除</button>
+      </div>
+      <div id="slashResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- Batch Vote Rewards & Penalties -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon orange">&#128202;</div>
+      <div>
+        <div class="card-title">按提案批量奖惩投票者</div>
+        <div class="card-desc">对指定提案的所有投票地址按社区奖惩率（奖励8%/惩罚4%）批量执行</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>提案 ID</label>
+        <input id="batchProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+      </div>
+      <div class="form-row">
+        <label>最终哈希</label>
+        <input id="batchFinalHash" class="inp inp-hash" type="text" placeholder="0x... 正确投票的哈希值">
+      </div>
+      <div style="font-size:12px; color:rgba(255,255,255,0.4); margin: 4px 0;">
+        投票与该哈希一致获得奖励（默认8%），不一致则受罚（默认4%）
+      </div>
+      <div class="form-row">
+        <button class="btn btn-outline btn-sm" onclick="checkBatchVoteRewardsStatus()">检查状态</button>
+        <button class="btn btn-primary btn-sm" onclick="applyBatchVoteRewards()">执行批量奖惩</button>
+      </div>
+      <div id="batchVoteRewardsResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- Config Viewer -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">&#128203;</div>
+      <div>
+        <div class="card-title">当前合约配置</div>
+        <div class="card-desc">查看 owner、审计团队、委员会等配置</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <button class="btn btn-outline btn-sm" onclick="loadConfig()" style="align-self:flex-start;">刷新配置</button>
+      <pre id="configInfo" class="code-block" style="margin-top:8px;">点击刷新加载配置</pre>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const BACKEND_API = CONFIG.API_BASE;
+  const PROPOSAL_STATUS = CONFIG.PROPOSAL_STATUS;
+
+  function _A() { return Wallet.getContracts().auditDAO; }
+  function _T() { return Wallet.getContracts().teamManager; }
+  function _S() { return Wallet.getSigner(); }
+  function _U() { return Wallet.getAddress(); }
+  function _P() { return Wallet.getProvider(); }
+
+  async function connectWallet() {
+    const btn = document.getElementById('connectBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 连接中...';
+    try {
+      await Wallet.connect();
+      refreshDebugInfo();
+      await checkAccessPermission();
+      btn.textContent = '已连接';
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = '连接钱包';
+      alert('连接钱包失败: ' + e.message);
+    }
+  }
+
+  async function checkAccessPermission() {
+    if (!Wallet.getSigner() || !Wallet.getAddress()) return;
+
+    try {
+      let roles;
+      try {
+        const res = await fetch(BACKEND_API + '/contract/roles?address=' + encodeURIComponent(Wallet.getAddress()));
+        roles = await res.json();
+      } catch (e) {
+        console.error('获取合约角色失败:', e);
+        alert('❌ 无法获取合约角色信息！\n\n错误: ' + e.message);
+        return;
+      }
+
+      if (roles.source === 'fallback') {
+        alert('❌ 无法连接合约网络！\n\n请确认网络连接正常后刷新重试。');
+        return;
+      }
+
+      const isOwner = roles.owner && roles.owner.toLowerCase() === Wallet.getAddress().toLowerCase();
+
+      if (isOwner) {
+        loadConfig();
+        return;
+      }
+
+      const isAuditTeam = roles.audit_team && roles.audit_team.toLowerCase() === Wallet.getAddress().toLowerCase();
+
+      if (isAuditTeam) {
+        alert('❌ 审计团队无权访问管理端！\n\n审计团队只能访问审计团队端，请返回用户端后点击"切换至审计团队"');
+        window.location.href = 'home.html';
+        return;
+      }
+
+      const isCommitteeMember = roles.is_committee === true;
+
+      if (!isCommitteeMember) {
+        alert('❌ 无权限访问管理端！\n\n您的地址: ' + Wallet.getAddress() + '\n合约 Owner: ' + (roles.owner || '未知') + '\n\n只有以下角色可以访问：\n• Owner\n• 委员会成员\n\n即将跳转到主页面...');
+        window.location.href = 'home.html';
+        return;
+      }
+
+      loadConfig();
+    } catch (e) {
+      console.error('权限检查失败:', e);
+      alert('获取权限信息失败: ' + e.message);
+    }
+  }
+
+  async function submitProposal() {
+    const codeHash = document.getElementById("codeHash").value.trim();
+    if (!codeHash) return alert("请输入代码哈希");
+
+    const cleanHash = codeHash.startsWith('0x') || codeHash.startsWith('0X') ? codeHash.slice(2) : codeHash;
+    if (cleanHash.length !== 64) {
+      return alert("无效的哈希格式！请输入 32 字节的十六进制哈希（64个字符）");
+    }
+
+    try {
+      document.getElementById("proposalResult").className = 'msg pending';
+      document.getElementById("proposalResult").innerHTML = '正在创建...';
+      const response = await axios.post(`${BACKEND_API}/admin/create-proposal`, {
+        code_hash: codeHash
+      });
+      const pid = response.data.proposal_id;
+      document.getElementById("proposalResult").className = 'msg success';
+      document.getElementById("proposalResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 提案已创建，ID: ' + pid;
+    } catch (e) {
+      document.getElementById("proposalResult").className = 'msg error';
+      document.getElementById("proposalResult").innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 失败: ' + (e.response?.data?.detail || e.message);
+    }
+  }
+
+  function setStartTimeNow() {
+    const now = new Date();
+    now.setSeconds(0);
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    document.getElementById("votingStartTime").value = `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  function setEndTimeFromNow() {
+    const now = new Date();
+    now.setDate(now.getDate() + 7);
+    now.setSeconds(0);
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    document.getElementById("votingEndTime").value = `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  async function startVoting() {
+    if (!Wallet.getSigner()) return alert("请先连接钱包");
+    const pid = document.getElementById("votingProposalId").value;
+    const startTimeStr = document.getElementById("votingStartTime").value;
+    const endTimeStr = document.getElementById("votingEndTime").value;
+    
+    if (!startTimeStr || !endTimeStr) {
+      return alert("请设置开始时间和结束时间");
+    }
+    
+    const startTime = Math.floor(new Date(startTimeStr).getTime() / 1000);
+    const endTime = Math.floor(new Date(endTimeStr).getTime() / 1000);
+    
+    if (startTime >= endTime) {
+      return alert("结束时间必须晚于开始时间");
+    }
+    
+    try {
+      const el = document.getElementById("votingResult");
+      
+      el.className = 'msg pending';
+      el.innerHTML = '正在加载提案信息...';
+      
+      const proposal = await _A().getProposalSummary(pid);
+      
+      if (!proposal.auditReportHash || 
+          proposal.auditReportHash === '0x' + '0'.repeat(64) || 
+          proposal.auditReportHash === ethers.constants.HashZero) {
+        el.className = 'msg error';
+        el.innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 审计团队报告尚未提交，请先在审计端提交报告';
+        return;
+      }
+      
+      try {
+        el.innerHTML = '正在开启社区审核...';
+        const tx0 = await _A().startCommunityReview(pid);
+        await tx0.wait();
+      } catch (reviewErr) {
+        const rMsg = (reviewErr.data && reviewErr.data.message) || reviewErr.message || '';
+        if (!rMsg.includes('Already') && !rMsg.toLowerCase().includes('already') && !rMsg.includes('status')) {
+          el.className = 'msg pending';
+          el.innerHTML = '社区审核已在进行中，继续...';
+        }
+      }
+      
+      el.innerHTML = '正在提交社区方案...';
+      const codeHashBytes = proposal.codeHash || '0x' + '0'.repeat(64);
+      try {
+        const tx1 = await _A().submitCommunityProposal(pid, codeHashBytes);
+        await tx1.wait();
+      } catch (submitErr) {
+        const msg = (submitErr.data && submitErr.data.message) || submitErr.message || '';
+        if (!msg.includes('!hash') && !msg.toLowerCase().includes('already submitted') && !msg.toLowerCase().includes('hash exists') && !msg.includes('exist') && !msg.includes('submitted')) {
+          throw submitErr;
+        }
+      }
+      
+      el.innerHTML = '正在开启投票...';
+      const duration = endTime - startTime;
+      const contract = _A();
+      const signer = Wallet.getSigner();
+      const iface = contract.interface;
+      const txOpts = { gasLimit: 500000 };
+      
+      try {
+        let data;
+        try {
+          data = iface.encodeFunctionData("startVoting(uint256,uint256)", [pid, duration]);
+        } catch (encErr) {
+          el.innerHTML = '两参数版本不可用，尝试单参数版本...';
+          data = iface.encodeFunctionData("startVoting(uint256)", [pid]);
+        }
+        const tx2 = await signer.sendTransaction(Object.assign({ to: contract.address, data: data }, txOpts));
+        await tx2.wait();
+      } catch (e) {
+        const msg = (e.data && e.data.message) || e.message || '';
+        if (!msg.includes('Invalid duration') && !msg.includes('already') && !msg.toLowerCase().includes('hash exists') && !msg.includes('exist') && !msg.includes('voting') && !msg.includes('status')) {
+          el.innerHTML = '两参数版本不可用，尝试单参数版本...';
+          try {
+            const data = iface.encodeFunctionData("startVoting(uint256)", [pid]);
+            const tx2 = await signer.sendTransaction(Object.assign({ to: contract.address, data: data }, txOpts));
+            await tx2.wait();
+          } catch (e2) {
+            const msg2 = (e2.data && e2.data.message) || e2.message || '';
+            if (!msg2.includes('already') && !msg2.toLowerCase().includes('hash exists') && !msg2.includes('exist') && !msg2.includes('voting') && !msg2.includes('status')) {
+              throw e2;
+            }
+            el.className = 'msg';
+            el.innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 提案 ' + pid + ' 投票已在运行中（重复调用已忽略）';
+            return;
+          }
+        }
+      }
+      
+      el.className = 'msg success';
+      el.innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 提案 ' + pid + ' 投票已开启';
+    } catch (e) {
+      const el = document.getElementById("votingResult");
+      let errorMsg = e.message || '';
+      if (e.data && e.data.message) {
+        errorMsg = e.data.message;
+      } else if (e.error && e.error.data && e.error.data.message) {
+        errorMsg = e.error.data.message;
+      }
+      const revertMatch = errorMsg.match(/reverted: (.+?)"/);
+      if (revertMatch) {
+        errorMsg = revertMatch[1];
+      }
+      if (e.code === 4001 || (e.message && e.message.toLowerCase().includes('user rejected'))) {
+        el.className = 'msg';
+        el.innerHTML = '已取消操作';
+      } else {
+        el.className = 'msg error';
+        el.innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 开启投票失败: ' + errorMsg;
+      }
+    }
+  }
+
+  async function finalizeVoting() {
+    if (!_S()) return alert("请先连接钱包");
+    const pid = document.getElementById("finalizeProposalId").value;
+    try {
+      document.getElementById("finalizeResult").className = 'msg pending';
+      document.getElementById("finalizeResult").innerHTML = '正在结束...';
+      const tx = await _A().finalizeVoting(pid);
+      await tx.wait();
+      document.getElementById("finalizeResult").className = 'msg success';
+      document.getElementById("finalizeResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 提案 ' + pid + ' 投票已结束';
+    } catch (e) { showContractError("finalizeResult", e); }
+  }
+
+  async function setAuditTeam() {
+    if (!_S()) return alert("请先连接钱包");
+    const addr = document.getElementById("newAuditTeam").value.trim();
+    if (!addr) return alert("请输入地址");
+    
+    try {
+      const owner = await _A().owner();
+      
+      if (owner.toLowerCase() !== _U().toLowerCase()) {
+        document.getElementById("auditTeamResult").className = 'msg error';
+        document.getElementById("auditTeamResult").innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 权限不足！只有合约 Owner 才能设置审计团队';
+        return;
+      }
+      
+      document.getElementById("auditTeamResult").className = 'msg pending';
+      document.getElementById("auditTeamResult").innerHTML = '⏳ 正在准备交易，请在 MetaMask 中确认...';
+      
+      const tx = await _A().setAuditTeam(addr);
+      
+      document.getElementById("auditTeamResult").innerHTML = '⏳ 等待交易确认...';
+      await tx.wait();
+      
+      document.getElementById("auditTeamResult").className = 'msg success';
+      document.getElementById("auditTeamResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 审计团队已更新为 ' + addr;
+      loadConfig();
+    } catch (e) { 
+      console.error('设置审计团队失败:', e);
+      const msg = e.message || '';
+      if (msg.includes('reverted')) {
+        document.getElementById("auditTeamResult").className = 'msg error';
+        document.getElementById("auditTeamResult").innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 合约执行失败！可能原因：<br>• 您不是合约 Owner<br>• 地址格式不正确<br>• 网络问题';
+      } else if (msg.includes('aborted') || msg.includes('cancel') || msg.includes('rejected')) {
+        document.getElementById("auditTeamResult").className = 'msg';
+        document.getElementById("auditTeamResult").innerHTML = '⚠️ 操作已取消，请在 MetaMask 中点击"确认"而不是"取消"';
+      } else if (msg.includes('Failed to fetch')) {
+        document.getElementById("auditTeamResult").className = 'msg error';
+        document.getElementById("auditTeamResult").innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 网络连接失败！请检查网络或切换 RPC 节点';
+      } else {
+        document.getElementById("auditTeamResult").className = 'msg error';
+        document.getElementById("auditTeamResult").innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 失败: ' + msg;
+      }
+    }
+  }
+
+  async function checkOwnerStatus() {
+    if (!_S()) return alert("请先连接钱包");
+    const targetAddr = document.getElementById("newOwner").value.trim();
+    if (!targetAddr) return alert("请输入要检查的地址");
+    
+    try {
+      const owner = await _A().owner();
+      const currentAddr = _U().toLowerCase();
+      const targetAddrLower = targetAddr.toLowerCase();
+      
+      const statusHtml = `<div style="font-size:12px; margin-bottom:8px;"><strong>当前连接地址:</strong> ${_U()}</div>
+<div style="font-size:12px; margin-bottom:8px;"><strong>合约 Owner:</strong> ${owner}</div>`;
+      
+      if (owner.toLowerCase() === targetAddrLower) {
+        document.getElementById("ownershipResult").className = 'msg success';
+        document.getElementById("ownershipResult").innerHTML = statusHtml + '<span style="flex-shrink:0;">&#10004;</span> ✓ ' + targetAddr + ' 已经是合约 Owner';
+      } else {
+        document.getElementById("ownershipResult").className = 'msg info';
+        document.getElementById("ownershipResult").innerHTML = statusHtml + '<span style="flex-shrink:0;">&#9432;</span> 目标地址: ' + targetAddr + '<br><strong>您' + (currentAddr === owner.toLowerCase() ? ' 是' : ' 不是') + '当前 Owner</strong>';
+      }
+    } catch (e) {
+      document.getElementById("ownershipResult").className = 'msg error';
+      document.getElementById("ownershipResult").innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 检查失败: ' + e.message;
+      console.error('Check Owner Error:', e);
+    }
+  }
+
+  async function transferOwnership() {
+    if (!_S()) return alert("请先连接钱包");
+    const newOwner = document.getElementById("newOwner").value.trim();
+    if (!newOwner) return alert("请输入新 owner 地址");
+    
+    try {
+      const owner = await _A().owner();
+      
+      if (owner.toLowerCase() !== _U().toLowerCase()) {
+        document.getElementById("ownershipResult").className = 'msg error';
+        document.getElementById("ownershipResult").innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 权限不足！<br>当前连接: ' + _U() + '<br>合约 Owner: ' + owner;
+        return;
+      }
+      
+      document.getElementById("ownershipResult").className = 'msg pending';
+      document.getElementById("ownershipResult").innerHTML = '正在发送交易，请在钱包中确认...';
+      
+      const tx = await _A().transferOwnership(newOwner);
+      
+      document.getElementById("ownershipResult").innerHTML = '交易已发送，等待确认...';
+      
+      await tx.wait();
+      
+      document.getElementById("ownershipResult").className = 'msg success';
+      document.getElementById("ownershipResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 所有权已转移给 ' + newOwner + '<br>交易哈希: ' + tx.hash;
+      loadConfig();
+    } catch (e) {
+      console.error('转移所有权失败:', e);
+      const msg = e.message || '';
+      
+      const code = e.code || '';
+      
+      if (e.code === 4001 || msg.includes('user rejected')) {
+        document.getElementById("ownershipResult").className = 'msg';
+        document.getElementById("ownershipResult").innerHTML = '⚠️ 您在钱包中取消了交易，请点击"确认"而不是"取消"';
+      } else if (msg.includes('aborted') || code === '-32603') {
+        document.getElementById("ownershipResult").className = 'msg';
+        document.getElementById("ownershipResult").innerHTML = '⚠️ 交易被取消！<br><strong>可能原因:</strong><br>• 在 MetaMask 中点击了"取消"<br>• 网络连接不稳定<br>• RPC 节点故障<br><br><strong>解决方案:</strong><br>• 请在 MetaMask 弹出时点击"确认"<br>• 切换到稳定的 RPC 节点 (如 https://ethereum-sepolia-rpc.publicnode.com)<br>• 检查网络连接';
+      } else if (msg.includes('reverted')) {
+        document.getElementById("ownershipResult").className = 'msg error';
+        document.getElementById("ownershipResult").innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 合约执行失败！<br>错误信息: ' + msg + '<br>请查看浏览器控制台了解详情';
+      } else if (msg.includes('Failed to fetch')) {
+        document.getElementById("ownershipResult").className = 'msg error';
+        document.getElementById("ownershipResult").innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 网络连接失败！请检查网络或切换 RPC 节点';
+      } else {
+        document.getElementById("ownershipResult").className = 'msg error';
+        document.getElementById("ownershipResult").innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 失败: ' + (e.response?.data?.detail || e.message);
+      }
+    }
+  }
+
+  async function setCommittee() {
+    if (!_S()) return alert("请先连接钱包");
+    const members = [
+      document.getElementById("committeeMember1").value.trim(),
+      document.getElementById("committeeMember2").value.trim(),
+      document.getElementById("committeeMember3").value.trim(),
+      document.getElementById("committeeMember4").value.trim(),
+      document.getElementById("committeeMember5").value.trim()
+    ];
+    if (members.some(m => !m)) return alert("请填写所有5个成员地址");
+    try {
+      document.getElementById("committeeResult").className = 'msg pending';
+      document.getElementById("committeeResult").innerHTML = '正在设置委员会...';
+      const tx = await _A().setCommitteeMembers(members);
+      await tx.wait();
+      document.getElementById("committeeResult").className = 'msg success';
+      document.getElementById("committeeResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 委员会已设置成功';
+      loadConfig();
+    } catch (e) { showContractError("committeeResult", e); }
+  }
+
+  async function setCommitteeRewardPenalty() {
+    if (!_S()) return alert("请先连接钱包");
+    const rewardRate = document.getElementById("committeeRewardRate").value;
+    const penaltyRate = document.getElementById("committeePenaltyRate").value;
+    if (!rewardRate || !penaltyRate) return alert("请输入奖励率和惩罚率");
+    try {
+      document.getElementById("committeeRewardPenaltyResult").className = 'msg pending';
+      document.getElementById("committeeRewardPenaltyResult").innerHTML = '正在设置...';
+      const tx = await _A().setCommitteeRewardPenaltyRates(rewardRate, penaltyRate);
+      await tx.wait();
+      document.getElementById("committeeRewardPenaltyResult").className = 'msg success';
+      document.getElementById("committeeRewardPenaltyResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 已设置：奖励率 ' + rewardRate + '，惩罚率 ' + penaltyRate;
+    } catch (e) { showContractError("committeeRewardPenaltyResult", e); }
+  }
+
+  function showParamsResult(msg) {
+    document.getElementById("contractParamsResult").className = 'msg success';
+    document.getElementById("contractParamsResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> ' + msg;
+  }
+
+  async function setMinStakeAmount() {
+    if (!_S()) return alert("请先连接钱包");
+    const amount = document.getElementById("minStakeAmount").value;
+    if (!amount) return alert("请输入数量");
+    try {
+      document.getElementById("contractParamsResult").className = 'msg pending';
+      document.getElementById("contractParamsResult").innerHTML = '正在设置...';
+      const tx = await _A().setMinStakeAmount(ethers.utils.parseEther(amount));
+      await tx.wait();
+      showParamsResult('最低质押量已设为 ' + amount + ' CEAT');
+    } catch (e) { showContractError("contractParamsResult", e); }
+  }
+
+  async function setVoteRewardPenalty() {
+    if (!_S()) return alert("请先连接钱包");
+    const rewardRate = document.getElementById("voteRewardRate").value;
+    const penaltyRate = document.getElementById("votePenaltyRate").value;
+    if (!rewardRate || !penaltyRate) return alert("请输入奖励率和惩罚率");
+    try {
+      document.getElementById("contractParamsResult").className = 'msg pending';
+      document.getElementById("contractParamsResult").innerHTML = '正在设置...';
+      const tx = await _A().setVoteRewardPenaltyRates(rewardRate, penaltyRate);
+      await tx.wait();
+      showParamsResult('投票奖惩率已设：奖励 ' + rewardRate + ' / 惩罚 ' + penaltyRate);
+    } catch (e) { showContractError("contractParamsResult", e); }
+  }
+
+  async function setMinArbitrationDeposit() {
+    if (!_S()) return alert("请先连接钱包");
+    const deposit = document.getElementById("minArbitrationDeposit").value;
+    if (!deposit) return alert("请输入押金数量");
+    try {
+      document.getElementById("contractParamsResult").className = 'msg pending';
+      document.getElementById("contractParamsResult").innerHTML = '正在设置...';
+      const tx = await _A().setMinArbitrationDeposit(ethers.utils.parseEther(deposit));
+      await tx.wait();
+      showParamsResult('仲裁押金已设为 ' + deposit + ' CEAT');
+    } catch (e) { showContractError("contractParamsResult", e); }
+  }
+
+  async function setDisputeRetentionPeriod() {
+    if (!_S()) return alert("请先连接钱包");
+    const days = document.getElementById("disputeRetentionPeriod").value;
+    if (!days) return alert("请输入天数");
+    try {
+      document.getElementById("contractParamsResult").className = 'msg pending';
+      document.getElementById("contractParamsResult").innerHTML = '正在设置...';
+      const tx = await _A().setDisputeRetentionPeriod(parseInt(days) * 86400);
+      await tx.wait();
+      showParamsResult('争议保留期已设为 ' + days + ' 天');
+    } catch (e) { showContractError("contractParamsResult", e); }
+  }
+
+  async function allocateReward() {
+    if (!_S()) return alert("请先连接钱包");
+    const recipient = document.getElementById("rewardRecipient").value.trim();
+    const amount = document.getElementById("rewardAmount").value;
+    if (!recipient || !amount) return alert("请输入地址和数量");
+    try {
+      document.getElementById("rewardResult").className = 'msg pending';
+      document.getElementById("rewardResult").innerHTML = '正在分配...';
+      const tx = await _A().allocateRewards(recipient, ethers.utils.parseEther(amount));
+      await tx.wait();
+      document.getElementById("rewardResult").className = 'msg success';
+      document.getElementById("rewardResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 已分配 ' + amount + ' CEAT 给 ' + recipient;
+    } catch (e) { showContractError("rewardResult", e); }
+  }
+
+  async function slashStake() {
+    if (!_S()) return alert("请先连接钱包");
+    const staker = document.getElementById("slashAddress").value.trim();
+    const amount = document.getElementById("slashAmount").value;
+    if (!staker || !amount) return alert("请输入地址和数量");
+    try {
+      document.getElementById("slashResult").className = 'msg pending';
+      document.getElementById("slashResult").innerHTML = '正在扣除...';
+      const tx = await _A().slashStake(staker, ethers.utils.parseEther(amount));
+      await tx.wait();
+      document.getElementById("slashResult").className = 'msg success';
+      document.getElementById("slashResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 已扣除 ' + staker + ' 质押 ' + amount + ' CEAT';
+    } catch (e) { showContractError("slashResult", e); }
+  }
+
+  async function checkBatchVoteRewardsStatus() {
+    if (!_S()) return alert("请先连接钱包");
+    const pid = document.getElementById("batchProposalId").value;
+    if (!pid && pid !== 0) return alert("请输入提案ID");
+    try {
+      document.getElementById("batchVoteRewardsResult").className = 'msg pending';
+      document.getElementById("batchVoteRewardsResult").innerHTML = '正在检查...';
+      const applied = await _A().voteRewardsApplied(pid);
+      if (applied) {
+        document.getElementById("batchVoteRewardsResult").className = 'msg info';
+        document.getElementById("batchVoteRewardsResult").innerHTML = '<span style="flex-shrink:0;">&#9432;</span> 提案 ' + pid + ' 的投票奖惩已经执行过，无法重复执行';
+      } else {
+        document.getElementById("batchVoteRewardsResult").className = 'msg success';
+        document.getElementById("batchVoteRewardsResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 提案 ' + pid + ' 尚未执行投票奖惩，可以执行';
+      }
+    } catch (e) { showContractError("batchVoteRewardsResult", e); }
+  }
+
+  async function applyBatchVoteRewards() {
+    if (!_S()) return alert("请先连接钱包");
+    const pid = document.getElementById("batchProposalId").value;
+    const finalHash = document.getElementById("batchFinalHash").value.trim();
+    if (!pid && pid !== 0) return alert("请输入提案ID");
+    if (!finalHash) return alert("请输入最终哈希");
+
+    const cleanHash = finalHash.startsWith('0x') || finalHash.startsWith('0X') ? finalHash.slice(2) : finalHash;
+    if (cleanHash.length !== 64) {
+      return alert("无效的哈希格式！请输入 32 字节的十六进制哈希（64个字符）");
+    }
+
+    try {
+      const applied = await _A().voteRewardsApplied(pid);
+      if (applied) {
+        document.getElementById("batchVoteRewardsResult").className = 'msg error';
+        document.getElementById("batchVoteRewardsResult").innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 提案 ' + pid + ' 的投票奖惩已经执行过，无法重复执行';
+        return;
+      }
+
+      document.getElementById("batchVoteRewardsResult").className = 'msg pending';
+      document.getElementById("batchVoteRewardsResult").innerHTML = '正在执行批量奖惩，请在 MetaMask 中确认...';
+      const tx = await _A().applyVoteRewardsPenalties(pid, '0x' + cleanHash);
+      document.getElementById("batchVoteRewardsResult").innerHTML = '等待交易确认...';
+      await tx.wait();
+      document.getElementById("batchVoteRewardsResult").className = 'msg success';
+      document.getElementById("batchVoteRewardsResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 提案 ' + pid + ' 批量投票奖惩已执行';
+    } catch (e) { showContractError("batchVoteRewardsResult", e); }
+  }
+
+  async function refreshDebugInfo() {
+    document.getElementById('debugContractAddr').textContent = CONFIG.AUDIT_DAO_ADDRESS;
+    document.getElementById('debugConnectedAddr').textContent = _U() || '(未连接)';
+    try {
+      if (_P()) {
+        const network = await _P().getNetwork();
+        document.getElementById('debugNetworkId').textContent = network.chainId + ' (' + network.name + ')';
+      }
+    } catch (e) {
+      document.getElementById('debugNetworkId').textContent = '获取失败';
+    }
+  }
+
+  async function loadConfig() {
+    if (!_A()) return;
+    try {
+      document.getElementById("configInfo").innerText = '加载中...';
+      const owner = await _A().owner();
+      const auditTeam = await _A().auditTeam();
+      document.getElementById("configInfo").innerText = JSON.stringify({ owner, auditTeam }, null, 2);
+    } catch (e) {
+      console.error('加载配置失败:', e);
+      document.getElementById("configInfo").innerText = '加载配置失败: ' + e.message;
+    }
+  }
+
+  Wallet.registerEvents();
+
+  // ==================== 多审计团队功能 ====================
+
+  async function registerAuditTeam() {
+    if (!_S()) return alert("请先连接钱包");
+    
+    const name = document.getElementById("auditTeamName").value.trim();
+    const teamContract = document.getElementById("auditTeamContract").value.trim();
+    
+    if (!name) return alert("请输入团队名称");
+    if (!teamContract) return alert("请输入团队合约地址");
+
+    // 收集成员地址
+    const members = [];
+    const memberInputs = ["auditTeamMember1", "auditTeamMember2", "auditTeamMember3", "auditTeamMember4", "auditTeamMember5"];
+    
+    for (let id of memberInputs) {
+      const addr = document.getElementById(id).value.trim();
+      if (addr) {
+        members.push(addr);
+      }
+    }
+
+    if (members.length < 2) {
+      return alert("至少需要2名团队成员");
+    }
+
+    try {
+      document.getElementById("createAuditTeamResult").className = "msg pending";
+      document.getElementById("createAuditTeamResult").innerHTML = "正在注册审计团队...";
+
+      const tx = await _T().registerAuditTeam(name, teamContract, members);
+      document.getElementById("createAuditTeamResult").innerHTML = "等待交易确认...";
+      const receipt = await tx.wait();
+
+      // 从事件中获取团队ID
+      const event = receipt.events?.find(e => e.event === "AuditTeamCreated");
+      if (event) {
+        const teamId = event.args[0].toString();
+        document.getElementById("createAuditTeamResult").className = "msg success";
+        document.getElementById("createAuditTeamResult").innerHTML = 
+          `<span style="flex-shrink:0;">&#10004;</span> 审计团队注册成功！<br>团队ID: ${teamId}<br>合约地址: ${teamContract}`;
+      } else {
+        document.getElementById("createAuditTeamResult").className = "msg success";
+        document.getElementById("createAuditTeamResult").innerHTML = 
+          `<span style="flex-shrink:0;">&#10004;</span> 审计团队注册成功！`;
+      }
+
+      loadAuditTeams();
+    } catch (e) {
+      console.error("注册审计团队失败:", e);
+      showContractError("createAuditTeamResult", e);
+    }
+  }
+
+  async function loadAuditTeams() {
+    if (!_A()) {
+      const container = document.getElementById("auditTeamsList");
+      container.innerHTML = '<div class="msg error" style="margin:0;"><span style="flex-shrink:0;">&#10060;</span> 请先连接钱包</div>';
+      return;
+    }
+    if (!_T()) {
+      const container = document.getElementById("auditTeamsList");
+      container.innerHTML = '<div class="msg info" style="margin:0;"><span class="spinner" style="margin-right:8px;"></span> 正在初始化团队管理器，请稍后再试...</div>';
+      return;
+    }
+
+    const container = document.getElementById("auditTeamsList");
+    container.innerHTML = '<div style="padding:20px; text-align:center; color:rgba(255,255,255,0.5);">加载中...</div>';
+
+    try {
+      const teamIds = await _T().getActiveAuditTeams();
+      
+      if (!teamIds || teamIds.length === 0) {
+        container.innerHTML = '<div style="color:rgba(255,255,255,0.5); padding:20px; text-align:center;">暂无活跃审计团队</div>';
+        return;
+      }
+
+      let html = '';
+      for (let i = 0; i < teamIds.length; i++) {
+        const teamId = teamIds[i];
+        const teamData = await _T().getAuditTeam(teamId);
+        const accuracy = await _T().getTeamAccuracy(teamId);
+        
+        const id = teamData[0].toString();
+        const contract = teamData[1];
+        const name = teamData[2];
+        const totalAudits = teamData[3].toString();
+        const successful = teamData[4].toString();
+        const reputation = teamData[5].toString();
+        const members = teamData[6];
+        const active = teamData[7];
+        const createdAt = new Date(Number(teamData[8].toString()) * 1000).toLocaleDateString();
+
+        html += `
+          <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+              <div>
+                <div style="font-size:16px; font-weight:600; color:#fff;">${name}</div>
+                <div style="font-size:12px; color:rgba(255,255,255,0.5);">团队ID: ${id}</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:24px; font-weight:700; color:#4ade80;">${accuracy}%</div>
+                <div style="font-size:12px; color:rgba(255,255,255,0.5);">准确率</div>
+              </div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:10px;">
+              <div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:8px;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.5);">完成审计</div>
+                <div style="font-size:16px; font-weight:600; color:#fff;">${totalAudits}</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:8px;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.5);">成功审计</div>
+                <div style="font-size:16px; font-weight:600; color:#4ade80;">${successful}</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:8px;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.5);">信誉分</div>
+                <div style="font-size:16px; font-weight:600; color:#fbbf24;">${reputation}/100</div>
+              </div>
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:12px; color:rgba(255,255,255,0.5); margin-bottom:4px;">合约地址</div>
+              <div style="font-family:monospace; font-size:12px; color:#60a5fa;">${contract.substring(0,16)}...${contract.substring(contract.length-8)}</div>
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:12px; color:rgba(255,255,255,0.5); margin-bottom:4px;">团队成员 (${members.length}人)</div>
+              <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                ${members.map(m => `<span style="font-family:monospace; font-size:11px; background:rgba(96,165,250,0.1); color:#60a5fa; padding:2px 6px; border-radius:4px;">${m.substring(0,8)}...</span>`).join('')}
+              </div>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding-top:8px; border-top:1px solid rgba(255,255,255,0.1);">
+              <div style="font-size:12px; color:rgba(255,255,255,0.5);">创建于 ${createdAt}</div>
+              <button class="btn btn-sm btn-danger" onclick="deactivateAuditTeam(${id})">停用</button>
+            </div>
+          </div>
+        `;
+      }
+      container.innerHTML = html;
+    } catch (e) {
+      console.error("加载审计团队失败:", e);
+      let errorMsg = "加载失败";
+      if (e.message && e.message.includes("Failed to fetch")) {
+        errorMsg = "网络连接失败，请检查 MetaMask RPC 配置";
+      } else if (e.message && e.message.length > 100) {
+        errorMsg = "合约调用失败，请确认合约已正确部署";
+      } else if (e.message) {
+        errorMsg = e.message.substring(0, 80);
+      }
+      container.innerHTML = `<div class="msg error" style="margin:0;"><span style="flex-shrink:0;">&#10060;</span> ${errorMsg}</div>`;
+    }
+  }
+
+  async function deactivateAuditTeam(teamId) {
+    if (!_S()) return alert("请先连接钱包");
+    if (!confirm(`确定要停用审计团队 ${teamId} 吗？`)) return;
+
+    try {
+      const tx = await _T().deactivateAuditTeam(teamId);
+      await tx.wait();
+      alert("审计团队已停用");
+      loadAuditTeams();
+    } catch (e) {
+      alert("停用失败: " + e.message);
+    }
+  }
+
+  Wallet.autoConnect();
+</script>
+</body>
+</html>
