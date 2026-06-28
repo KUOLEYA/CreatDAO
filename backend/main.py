@@ -69,8 +69,12 @@ async def rpc_proxy(request: Request):
 @app.post("/api/dispute/committee-vote")
 def committee_vote(req: schemas.CommitteeVoteRequest, db: Session = Depends(get_db)):
     try:
-        contract_utils.committee_vote_async(req.proposal_id, req.support_auditor)
-        return {"status": "success"}
+        receipt = contract_utils.committee_vote_on_chain(req.proposal_id, req.support_auditor)
+        if receipt.status != 1:
+            raise HTTPException(status_code=500, detail="委员会投票失败(revert)")
+        return {"status": "success", "tx_hash": receipt.transactionHash.hex()}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -119,8 +123,10 @@ def submit_report(req: schemas.SubmitReportRequest):
             print(f"Read error: {e}")
 
         # 3. 发送交易
-        contract_utils.submit_audit_report_on_chain(req.proposal_id, report_hash_bytes)
-        return {"status": "success"}
+        receipt = contract_utils.submit_audit_report_on_chain(req.proposal_id, report_hash_bytes)
+        if receipt.status != 1:
+            raise HTTPException(status_code=500, detail="提交审计报告失败(revert)")
+        return {"status": "success", "tx_hash": receipt.transactionHash.hex()}
     except Exception as e:
         error_msg = str(e)
         if "execution reverted" in error_msg:
@@ -144,8 +150,10 @@ def submit_community_proposal(req: schemas.SubmitReportRequest):
         except Exception:
             pass
         
-        contract_utils.submit_community_proposal_on_chain(req.proposal_id, report_hash_bytes)
-        return {"status": "success"}
+        receipt = contract_utils.submit_community_proposal_on_chain(req.proposal_id, report_hash_bytes)
+        if receipt.status != 1:
+            raise HTTPException(status_code=500, detail="提交社区方案失败(revert)")
+        return {"status": "success", "tx_hash": receipt.transactionHash.hex()}
     except HTTPException:
         raise
     except Exception as e:

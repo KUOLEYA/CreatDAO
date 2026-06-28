@@ -12,13 +12,14 @@ from contract_utils import (
     PROPOSAL_STATUS_MAP,
     PROPOSAL_STATUS_CN,
     RISK_LEVEL_MAP,
-    create_proposal_on_chain_async,
-    start_voting_async,
-    finalize_voting_async,
-    allocate_rewards_async,
-    slash_stake_async,
-    apply_vote_rewards_async,
-    transfer_ownership_async,
+    create_proposal_on_chain,
+    start_voting_on_chain,
+    finalize_voting_on_chain,
+    allocate_rewards_on_chain,
+    slash_stake_on_chain,
+    apply_vote_rewards_on_chain,
+    start_community_review_on_chain,
+    transfer_ownership_on_chain,
 )
 
 router = APIRouter(prefix="/api", tags=["proposals"])
@@ -29,13 +30,23 @@ def create_proposal(req: schemas.CreateProposalRequest, db: Session = Depends(ge
     try:
         code_hash_bytes = validate_hex_hash(req.code_hash, "code hash")
 
-        proposal_id = audit_dao_contract.functions.nextProposalId().call()
+        # 读取当前下一个 proposal_id（创建前的值）
+        current_next_id = audit_dao_contract.functions.nextProposalId().call()
 
-        create_proposal_on_chain_async(code_hash_bytes)
+        # 同步创建链上提案，等待确认
+        receipt = create_proposal_on_chain(code_hash_bytes)
+        if receipt.status != 1:
+            raise HTTPException(status_code=500, detail="链上交易失败(revert)")
+
+        # 交易成功，proposal_id = 创建前的 nextProposalId
+        proposal_id = current_next_id
+
+        # 标准化 code_hash：确保带 0x 前缀
+        normalized_hash = req.code_hash if req.code_hash.startswith("0x") else "0x" + req.code_hash
 
         db_proposal = models.Proposal(
             proposal_id=proposal_id,
-            code_hash=req.code_hash,
+            code_hash=normalized_hash,
             status="Submitted",
             description=req.description or "",
             created_at=datetime.now(timezone.utc)
@@ -53,8 +64,26 @@ def create_proposal(req: schemas.CreateProposalRequest, db: Session = Depends(ge
 @router.post("/admin/start-voting")
 def start_voting(req: schemas.AdminActionRequest, db: Session = Depends(get_db)):
     try:
-        start_voting_async(req.proposal_id)
-        return {"status": "success"}
+        receipt = start_voting_on_chain(req.proposal_id)
+        if receipt.status != 1:
+            raise HTTPException(status_code=500, detail="开启投票失败(revert)")
+        return {"status": "success", "tx_hash": receipt.transactionHash.hex()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/admin/start-community-review")
+def start_community_review(req: schemas.AdminActionRequest, db: Session = Depends(get_db)):
+    """将提案推进到 CommunityReview 状态（前置：需先提交审计团队报告）"""
+    try:
+        receipt = start_community_review_on_chain(req.proposal_id)
+        if receipt.status != 1:
+            raise HTTPException(status_code=500, detail="开启社区审核失败(revert)")
+        return {"status": "success", "tx_hash": receipt.transactionHash.hex()}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -62,8 +91,12 @@ def start_voting(req: schemas.AdminActionRequest, db: Session = Depends(get_db))
 @router.post("/admin/finalize-voting")
 def finalize_voting(req: schemas.AdminActionRequest, db: Session = Depends(get_db)):
     try:
-        finalize_voting_async(req.proposal_id)
-        return {"status": "success"}
+        receipt = finalize_voting_on_chain(req.proposal_id)
+        if receipt.status != 1:
+            raise HTTPException(status_code=500, detail="结束投票失败(revert)")
+        return {"status": "success", "tx_hash": receipt.transactionHash.hex()}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -72,8 +105,12 @@ def finalize_voting(req: schemas.AdminActionRequest, db: Session = Depends(get_d
 def allocate_rewards(req: schemas.AllocateRewardsRequest, db: Session = Depends(get_db)):
     try:
         amount_wei = int(req.amount)
-        allocate_rewards_async(req.recipient, amount_wei)
-        return {"status": "success"}
+        receipt = allocate_rewards_on_chain(req.recipient, amount_wei)
+        if receipt.status != 1:
+            raise HTTPException(status_code=500, detail="分配奖励失败(revert)")
+        return {"status": "success", "tx_hash": receipt.transactionHash.hex()}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -82,8 +119,12 @@ def allocate_rewards(req: schemas.AllocateRewardsRequest, db: Session = Depends(
 def slash_stake(req: schemas.SlashStakeRequest, db: Session = Depends(get_db)):
     try:
         amount_wei = int(req.amount)
-        slash_stake_async(req.staker, amount_wei)
-        return {"status": "success"}
+        receipt = slash_stake_on_chain(req.staker, amount_wei)
+        if receipt.status != 1:
+            raise HTTPException(status_code=500, detail="罚没质押失败(revert)")
+        return {"status": "success", "tx_hash": receipt.transactionHash.hex()}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -92,8 +133,10 @@ def slash_stake(req: schemas.SlashStakeRequest, db: Session = Depends(get_db)):
 def apply_vote_rewards(req: schemas.ApplyVoteRewardsRequest, db: Session = Depends(get_db)):
     try:
         final_hash_bytes = validate_hex_hash(req.final_hash, "final hash")
-        apply_vote_rewards_async(req.proposal_id, final_hash_bytes)
-        return {"status": "success"}
+        receipt = apply_vote_rewards_on_chain(req.proposal_id, final_hash_bytes)
+        if receipt.status != 1:
+            raise HTTPException(status_code=500, detail="应用投票奖惩失败(revert)")
+        return {"status": "success", "tx_hash": receipt.transactionHash.hex()}
     except HTTPException:
         raise
     except Exception as e:
@@ -103,8 +146,12 @@ def apply_vote_rewards(req: schemas.ApplyVoteRewardsRequest, db: Session = Depen
 @router.post("/admin/transfer-ownership")
 def transfer_ownership(req: schemas.TransferOwnershipRequest, db: Session = Depends(get_db)):
     try:
-        transfer_ownership_async(req.new_owner)
-        return {"status": "success", "new_owner": req.new_owner}
+        receipt = transfer_ownership_on_chain(req.new_owner)
+        if receipt.status != 1:
+            raise HTTPException(status_code=500, detail="转移所有权失败(revert)")
+        return {"status": "success", "tx_hash": receipt.transactionHash.hex(), "new_owner": req.new_owner}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -217,5 +264,16 @@ def get_proposal_full_info(proposal_id: int, db: Session = Depends(get_db)):
             "AI筛查报告": getattr(db_proposal, 'ai_screening_report', None) if db_proposal else None
         }
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/admin/reset-db")
+def reset_database(db: Session = Depends(get_db)):
+    """清空所有数据库表数据，用于本地测试环境重置。仅在非生产环境使用。"""
+    try:
+        models.Base.metadata.drop_all(bind=db.get_bind())
+        models.Base.metadata.create_all(bind=db.get_bind())
+        return {"status": "success", "message": "数据库已重置，所有表已重建"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

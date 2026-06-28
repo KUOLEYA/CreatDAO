@@ -25,8 +25,10 @@ module.exports = {
     },
     sepolia: {
       url: process.env.SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com",
-      accounts: (process.env.ADMIN_PRIVATE_KEY && /^[0-9a-fA-F]{64}$/.test(process.env.ADMIN_PRIVATE_KEY))
-        ? [process.env.ADMIN_PRIVATE_KEY] : [],
+      accounts: (function() {
+        const pk = (process.env.ADMIN_PRIVATE_KEY || "").replace(/^0x/, "");
+        return /^[0-9a-fA-F]{64}$/.test(pk) ? ["0x" + pk] : [];
+      })(),
       chainId: 11155111,
     },
   },

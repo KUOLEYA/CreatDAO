@@ -136,22 +136,9 @@ def send_transaction(func, *args):
             else:
                 raise
 
-def _run_async(label, func, *args):
-    def _wrapper():
-        try:
-            func(*args)
-            print(f"[Async] {label} succeeded")
-        except Exception as e:
-            print(f"[Async] {label} failed: {e}")
-    threading.Thread(target=_wrapper, daemon=True).start()
-
-
 def chain_call(contract_func, *args):
+    """同步执行链上交易，等待 receipt 确认后返回。"""
     return send_transaction(contract_func, *args)
-
-
-def chain_call_async(label, contract_func, *args):
-    _run_async(label, lambda: send_transaction(contract_func, *args))
 
 
 # --- Synchronous chain operations ---
@@ -193,36 +180,8 @@ def approve_ceat_on_chain(spender, amount):
 def set_audit_team_on_chain(team_address):
     return chain_call(audit_dao_contract.functions.setAuditTeam, team_address)
 
+def start_community_review_on_chain(proposal_id):
+    return chain_call(audit_dao_contract.functions.startCommunityReview, proposal_id)
+
 def transfer_ownership_on_chain(new_owner):
     return chain_call(audit_dao_contract.functions.transferOwnership, new_owner)
-
-
-# --- Async wrappers (fire-and-forget in background thread) ---
-
-def create_proposal_on_chain_async(code_hash_bytes):
-    code_hash_bytes32 = bytes(code_hash_bytes.ljust(32, b'\x00')[:32])
-    chain_call_async("Proposal created", audit_dao_contract.functions.createProposal, code_hash_bytes32)
-
-def start_voting_async(proposal_id):
-    chain_call_async(f"Voting started for proposal {proposal_id}", audit_dao_contract.functions.startVoting, proposal_id)
-
-def finalize_voting_async(proposal_id):
-    chain_call_async(f"Voting finalized for proposal {proposal_id}", audit_dao_contract.functions.finalizeVoting, proposal_id)
-
-def allocate_rewards_async(recipient, amount):
-    chain_call_async(f"Rewards allocated to {recipient}", audit_dao_contract.functions.allocateRewards, recipient, amount)
-
-def slash_stake_async(staker, amount):
-    chain_call_async(f"Stake slashed for {staker}", audit_dao_contract.functions.slashStake, staker, amount)
-
-def apply_vote_rewards_async(proposal_id, final_hash_bytes):
-    chain_call_async(f"Vote rewards applied for proposal {proposal_id}", audit_dao_contract.functions.applyVoteRewardsPenalties, proposal_id, final_hash_bytes)
-
-def transfer_ownership_async(new_owner):
-    chain_call_async(f"Ownership transferred to {new_owner}", audit_dao_contract.functions.transferOwnership, new_owner)
-
-def committee_vote_async(proposal_id, support_auditor):
-    chain_call_async(f"Committee voted on proposal {proposal_id}", audit_dao_contract.functions.committeeVote, proposal_id, support_auditor)
-
-def claim_proposal_async(proposal_id, team_id=0):
-    chain_call_async(f"Proposal {proposal_id} claimed", audit_dao_contract.functions.claimProposal, proposal_id, team_id)
