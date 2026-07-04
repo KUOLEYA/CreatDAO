@@ -28,6 +28,8 @@ venv/
 
 # Runtime generated
 audit_uploads/
+*.bak
+*.log
 
 # IDE
 .vscode/

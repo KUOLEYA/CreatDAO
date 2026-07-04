@@ -39,10 +39,32 @@ def get_contract_roles(address: str = Query(None)):
 
 
 @router.get("/contract-addresses")
-def get_contract_addresses():
+def get_contract_addresses(chain_id: int = Query(None, description="链ID: 31337(本地) 或 11155111(Sepolia)")):
+    if chain_id and chain_id in contract_utils.NETWORK_ADDRESSES:
+        addrs = contract_utils.NETWORK_ADDRESSES[chain_id]
+        return {
+            "chain_id": chain_id,
+            "network_name": addrs["NETWORK_NAME"],
+            "audit_dao_address": addrs["AUDIT_DAO_ADDRESS"],
+            "ceat_token_address": addrs["CEAT_TOKEN_ADDRESS"],
+            "team_manager_address": addrs["TEAM_MANAGER_ADDRESS"],
+        }
+    # 无 chain_id 时返回所有可用网络
     return {
+        "chain_id": None,
+        "networks": {
+            str(cid): {
+                "network_name": info["NETWORK_NAME"],
+                "audit_dao_address": info["AUDIT_DAO_ADDRESS"],
+                "ceat_token_address": info["CEAT_TOKEN_ADDRESS"],
+                "team_manager_address": info["TEAM_MANAGER_ADDRESS"],
+            }
+            for cid, info in contract_utils.NETWORK_ADDRESSES.items()
+        },
+        # 兼容旧版前端：返回默认（活跃网络）地址
         "audit_dao_address": contract_utils.AUDIT_DAO_ADDRESS,
-        "ceat_token_address": contract_utils.CEAT_TOKEN_ADDRESS
+        "ceat_token_address": contract_utils.CEAT_TOKEN_ADDRESS,
+        "team_manager_address": contract_utils.TEAM_MANAGER_ADDRESS,
     }
 
 

@@ -11,7 +11,7 @@
   <script src="lib/sha256.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=6"></script>
+  <script src="contract.js?v=10"></script>
   <script src="wallet.js?v=3"></script>
   <style>
     .risk-selector { display: flex; gap: 10px; }
@@ -97,11 +97,20 @@
         <span>CreatDAO Community Audit Report</span>
       </div>
     </div>
-    <div style="display: flex; gap: 12px; align-items: center;">
-      <div class="wallet-status" id="walletStatus">
-        <span class="dot-indicator disconnected"></span>
-        <span style="color:rgba(255,255,255,0.4);">未连接</span>
-      </div>
+    <div class="header-right">
+      <span class="network-pill local" id="networkPill" onclick="toggleNetworkDropdown(event)" title="点击切换网络">
+        <span class="dot"></span>
+        <span id="networkPillLabel">Hardhat Local</span>
+        <div class="network-dropdown" id="networkDropdown">
+          <div class="network-dropdown-item" onclick="switchNetworkTo(31337); event.stopPropagation();">
+            <span class="net-dot local-dot"></span> Hardhat Local (31337)
+          </div>
+          <div class="network-dropdown-item" onclick="switchNetworkTo(11155111); event.stopPropagation();">
+            <span class="net-dot sepolia-dot"></span> Sepolia Testnet (11155111)
+          </div>
+        </div>
+      </span>
+      <button class="btn btn-outline btn-sm" id="walletBtn" onclick="Wallet.handleWalletClick()" style="color:#81c784;">🔌 连接钱包</button>
       <button class="btn btn-outline" onclick="window.location.href='home.html'">返回用户端</button>
     </div>
   </header>
@@ -109,20 +118,6 @@
   <div class="panel-header">
     <h1>社区审计提案编写模块</h1>
     <p>编辑审计提案内容，自动生成提案哈希并发布至链上</p>
-  </div>
-
-  <div class="card">
-    <div class="card-header">
-      <div class="card-icon purple">🔗</div>
-      <div>
-        <div class="card-title">钱包连接</div>
-        <div class="card-desc">连接钱包后才能提交提案至链上</div>
-      </div>
-    </div>
-    <div class="card-body">
-      <button class="btn btn-primary" onclick="connectWallet()" id="connectBtn">连接钱包</button>
-      <div id="balanceInfo" class="msg info">连接钱包后查看质押信息</div>
-    </div>
   </div>
 
   <div class="card">
@@ -335,7 +330,29 @@
   let selectedRisk = '';
   let reportData = {};
   let findingCount = 1;
-  let proposalHash = '';
+let proposalHash = '';
+
+// 从 URL 参数读取预填信息
+(function loadUrlParams() {
+  var params = new URLSearchParams(window.location.search);
+  var pid = params.get('proposal_id') || params.get('pid');
+  var addr = params.get('contract') || params.get('address');
+  var hash = params.get('code_hash') || params.get('hash');
+  if (pid) $('proposalId').value = pid;
+  if (addr) $('contractAddress').value = addr;
+  if (hash) $('codeHash').value = hash;
+  if (pid || addr || hash) {
+    // 有预填参数时，添加快速发布区域
+    var infoSection = document.querySelector('.card:nth-of-type(2) .card-body');
+    if (infoSection) {
+      var quickBar = document.createElement('div');
+      quickBar.id = 'quickSubmitBar';
+      quickBar.style.cssText = 'margin-top:16px;padding:14px 18px;background:rgba(102,126,234,0.08);border-radius:10px;border:1px solid rgba(102,126,234,0.2);display:flex;align-items:center;gap:12px;flex-wrap:wrap;';
+      quickBar.innerHTML = '<span style="font-size:13px;color:rgba(255,255,255,0.6);">提案信息已预填，继续</span><span style="color:#667eea;font-size:13px;">⬇ 向下滚动填写审计内容后提交</span><button class="btn btn-primary btn-sm" onclick="document.querySelector(\'.card:last-of-type\').scrollIntoView({behavior:\'smooth\',block:\'center\'});" style="margin-left:auto;">⚡ 跳转到发布区域</button>';
+      infoSection.appendChild(quickBar);
+    }
+  }
+})();
 
   function selectRisk(risk) {
     selectedRisk = risk;
@@ -386,25 +403,16 @@
     showSuccess('submitResult', '测试报告模板已填充，请根据实际测试情况修改！');
   }
 
-  async function connectWallet() {
-    const btn = document.getElementById('connectBtn');
-    btn.disabled = true;
-    btn.textContent = '⏳ 连接中...';
-    try {
-      var ok = await Wallet.connect();
-      if (ok) {
-        btn.textContent = '已连接';
-        await loadStakeInfo();
-      } else {
-        btn.disabled = false;
-        btn.textContent = '连接钱包';
-      }
-    } catch (e) {
-      btn.disabled = false;
-      btn.textContent = '连接钱包';
-      console.error('Connect wallet failed:', e);
+  // --- 使用 Wallet.setCallbacks 处理连接后的页面逻辑 ---
+  Wallet.setCallbacks(
+    async function(addr) {
+      await loadStakeInfo();
+    },
+    function() {
+      $('balanceInfo').className = 'msg info';
+      $('balanceInfo').textContent = '连接钱包后查看质押信息';
     }
-  }
+  );
 
   async function loadStakeInfo() {
     var _addr = _U(); if (!_addr) return;

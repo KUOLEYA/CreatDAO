@@ -11,7 +11,7 @@
   <script src="lib/sha256.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=6"></script>
+  <script src="contract.js?v=10"></script>
   <script src="wallet.js?v=3"></script>
   <style>
 .inp-date {
@@ -105,7 +105,19 @@
       </div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
-      <button class="btn btn-outline btn-sm" id="walletBtn" onclick="handleWalletClick()" style="color:#81c784;">🔌 连接钱包</button>
+      <span class="network-pill local" id="networkPill" onclick="toggleNetworkDropdown(event)" title="点击切换网络">
+        <span class="dot"></span>
+        <span id="networkPillLabel">Hardhat Local</span>
+        <div class="network-dropdown" id="networkDropdown">
+          <div class="network-dropdown-item" onclick="switchNetworkTo(31337); event.stopPropagation();">
+            <span class="net-dot local-dot"></span> Hardhat Local (31337)
+          </div>
+          <div class="network-dropdown-item" onclick="switchNetworkTo(11155111); event.stopPropagation();">
+            <span class="net-dot sepolia-dot"></span> Sepolia Testnet (11155111)
+          </div>
+        </div>
+      </span>
+      <button class="btn btn-outline btn-sm" id="walletBtn" onclick="Wallet.handleWalletClick()" style="color:#81c784;">🔌 连接钱包</button>
       <button class="btn btn-outline" onclick="window.location.href='home.html'">返回主页面</button>
     </div>
   </header>
@@ -127,18 +139,23 @@
     </div>
     <div class="card-body">
 
-      <div class="form-row">
-        <label>预估代码行数</label>
-        <input id="pricingCodeLines" class="inp inp-num" type="number" placeholder="行数" min="100" step="100" value="1000" onchange="updatePricingSummary()">
-        <label>合约复杂度</label>
-        <select id="complexitySelect" class="inp" style="min-width:140px;" onchange="updatePricingSummary()">
+      <div class="form-row" style="flex-wrap:nowrap;gap:8px;">
+        <label style="min-width:auto;">服务层级</label>
+        <select id="tierSelect" class="inp" style="min-width:150px;" onchange="updatePricingSummary()">
+          <option value="standard" selected>⭐ 标准版（AI+社区）</option>
+          <option value="deep">🔬 深度版（AI+团队+社区）</option>
+        </select>
+        <label style="min-width:auto;">预估代码行数</label>
+        <input id="pricingCodeLines" class="inp inp-num" type="number" placeholder="行数" min="100" step="100" value="1000" onchange="updatePricingSummary()" style="min-width:80px;width:90px;">
+        <label style="min-width:auto;">合约复杂度</label>
+        <select id="complexitySelect" class="inp" style="min-width:120px;" onchange="updatePricingSummary()">
           <option value="simple">简单 ×0.7</option>
           <option value="moderate" selected>中等 ×1.0</option>
           <option value="complex">复杂 ×1.5</option>
           <option value="highly_complex">高度复杂 ×2.0</option>
         </select>
-        <label>资产池规模</label>
-        <select id="assetPoolSelect" class="inp" style="min-width:120px;" onchange="updatePricingSummary()">
+        <label style="min-width:auto;">资产池规模</label>
+        <select id="assetPoolSelect" class="inp" style="min-width:100px;" onchange="updatePricingSummary()">
           <option value="micro">微型</option>
           <option value="small" selected>小型</option>
           <option value="medium">中型</option>
@@ -156,7 +173,7 @@
         </div>
         <div>
           <div style="text-align:center;padding:8px 12px;">
-            <span style="font-size:13px;color:#81c784;">💎 仅支持 CEAT 代币支付 (85折)</span>
+            <span id="tokenDiscountHint" style="font-size:13px;color:#81c784;display:none;">💎 使用赏金池享 CEAT 支付 8.5 折</span>
           </div>
         </div>
       </div>
@@ -278,6 +295,7 @@
 <script>
   const BACKEND_API = CONFIG.API_BASE;
   let selectedFiles = [];
+  let currentTier = 'standard';
   let currentComplexity = 'moderate';
   let currentAssetPool = 'small';
   let currentCodeLines = 1000;
@@ -298,33 +316,9 @@
     }
   }
 
-  async function handleWalletClick() {
-    const btn = document.getElementById('walletBtn');
-    if (Wallet.getAddress()) {
-      Wallet.disconnect();
-      btn.textContent = '🔌 连接钱包';
-      btn.style.color = '#81c784';
-      showInfo('uploadResult', '钱包已断开');
-    } else {
-      btn.disabled = true;
-      btn.textContent = '⏳ 连接中...';
-      btn.style.color = '#ffb74d';
-      try {
-        const addr = await connectWallet();
-        if (addr) {
-          btn.textContent = '🟢 ' + getShortAddr(addr);
-          btn.style.color = '#81c784';
-          showSuccess('uploadResult', '钱包已连接: ' + getShortAddr(addr));
-        } else {
-          btn.textContent = '🔌 连接钱包';
-          btn.style.color = '#81c784';
-        }
-      } finally {
-        btn.disabled = false;
-      }
-    }
+  function getSelectedTier() {
+    return document.getElementById('tierSelect').value;
   }
-
   function getSelectedComplexity() {
     return document.getElementById('complexitySelect').value;
   }
@@ -334,15 +328,16 @@
   }
 
   async function updatePricingSummary() {
+    currentTier = getSelectedTier();
     currentComplexity = getSelectedComplexity();
     currentAssetPool = getSelectedAssetPool();
     currentCodeLines = parseInt(document.getElementById('pricingCodeLines').value) || 1000;
 
     const needBounty = document.getElementById('pricingNeedBounty').checked;
     const bountyAmount = parseFloat(document.getElementById('pricingBountyAmount').value) || 0;
-    const payWithToken = true;
-
+    const payWithToken = needBounty;
     document.getElementById('bountyInputArea').style.display = needBounty ? 'block' : 'none';
+    document.getElementById('tokenDiscountHint').style.display = needBounty ? '' : 'none';
 
     const complexityLabels = { simple: '简单', moderate: '中等', complex: '复杂', highly_complex: '高度复杂' };
     const assetLabels = { micro: '微型', small: '小型', medium: '中型', large: '大型', extra_large: '超大型' };
@@ -351,7 +346,7 @@
 
     try {
       const res = await axios.post(`${BACKEND_API}/pricing/calculate`, {
-        tier: 'standard', complexity: currentComplexity, asset_pool_size: currentAssetPool,
+        tier: currentTier, complexity: currentComplexity, asset_pool_size: currentAssetPool,
         code_lines: currentCodeLines,
         need_bounty: needBounty,
         bounty_amount: bountyAmount,
@@ -484,7 +479,7 @@
 
     try {
       const orderRes = await axios.post(`${BACKEND_API}/pricing/orders`, {
-        tier: 'standard',
+        tier: currentTier,
         project_name: $('projectName').value || 'Unnamed Project',
         complexity: currentComplexity,
         asset_pool_size: currentAssetPool,
@@ -719,7 +714,10 @@
               📋 社区和审计团队的提案列表已刷新，可以前往查看并领取提案。
             </div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-              <button class="btn btn-primary" onclick="goToDashboard()">
+              <button class="btn btn-primary" onclick="goToProposalWriting()">
+                <span>📝</span> 编写并提交提案报告
+              </button>
+              <button class="btn btn-outline" onclick="goToDashboard()">
                 <span>📊</span> 前往社区提案列表
               </button>
               <button class="btn btn-outline" onclick="goToAuditTeam()">
@@ -748,69 +746,148 @@
 
   async function handlePayment() {
     if (!Wallet.getAddress()) {
-      alert('请先连接钱包');
+      showError('paymentStatus', '请先连接钱包！点击右上角"连接钱包"按钮');
       return;
     }
 
-    document.getElementById('payBtn').disabled = true;
-    document.getElementById('paymentStatus').style.display = 'block';
+    const payBtn = document.getElementById('payBtn');
+    payBtn.disabled = true;
+    const statusEl = document.getElementById('paymentStatus');
+    statusEl.style.display = 'block';
 
     try {
-      showPending('paymentStatus', '正在切换网络...');
-      await Wallet.switchToSepolia();
-
-      const CEAT_ADDRESS = CONFIG.CEAT_TOKEN_ADDRESS;
-      const DAO_ADDRESS = CONFIG.AUDIT_DAO_ADDRESS;
+      // 1. 检测当前网络并加载合约地址
+      showPending('paymentStatus', '正在检测网络...');
       const provider = Wallet.getProvider();
       if (!provider) throw new Error('钱包连接丢失，请刷新页面后重试');
+
+      const network = await provider.getNetwork();
+      const chainIdDec = network.chainId;
+      const netName = CONFIG.NETWORKS[chainIdDec] ? CONFIG.NETWORKS[chainIdDec].name : ('未知(' + chainIdDec + ')');
+      const isLocal = chainIdDec === 31337;
+      const isSepolia = chainIdDec === 11155111;
+
+      if (!isLocal && !isSepolia) {
+        throw new Error(
+          '当前网络不受支持: ' + netName + '\n' +
+          '请切换到以下网络之一：\n' +
+          '  - Hardhat Local (chainId: 31337)\n' +
+          '  - Sepolia Testnet (chainId: 11155111)'
+        );
+      }
+
+      // 确保合约地址已加载
+      if (!isConfigLoaded()) {
+        showPending('paymentStatus', '正在加载合约地址...');
+        await loadContractAddresses(chainIdDec);
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      // 2. 初始化合约
+      const CEAT_ADDRESS = CONFIG.CEAT_TOKEN_ADDRESS;
+      const DAO_ADDRESS = CONFIG.AUDIT_DAO_ADDRESS;
       const signer = provider.getSigner();
       const tokenContract = new ethers.Contract(CEAT_ADDRESS, [
         'function transfer(address to, uint256 amount) external returns (bool)',
         'function decimals() external view returns (uint8)',
         'function balanceOf(address account) external view returns (uint256)',
+        'function symbol() external view returns (string)',
       ], signer);
 
-      const decimals = await tokenContract.decimals();
-      const finalPayable = currentPricing ? (currentPricing.total_after_discount || currentPricing.final_payable) : 0;
-      const CEAT_PRICE_USD = 0.05;
-      const tokenAmount = ethers.utils.parseUnits(String(Math.ceil(finalPayable / CEAT_PRICE_USD)), decimals);
-
-      showPending('paymentStatus', '正在检查余额...');
-      
-      const balance = await tokenContract.balanceOf(Wallet.getAddress());
-      if (balance.lt(tokenAmount)) {
-        const balanceInCEAT = ethers.utils.formatUnits(balance, decimals);
-        const amountInCEAT = ethers.utils.formatUnits(tokenAmount, decimals);
-        showError('paymentStatus', `余额不足！当前余额: ${balanceInCEAT} CEAT，需要: ${amountInCEAT} CEAT`);
-        document.getElementById('payBtn').disabled = false;
-        return;
+      // 3. 验证合约存在
+      showPending('paymentStatus', '正在验证 CEAT 合约 (' + netName + ')...');
+      let decimals, symbol;
+      try {
+        decimals = await tokenContract.decimals();
+        symbol = await tokenContract.symbol();
+      } catch (e) {
+        if (!isConfigLoaded()) {
+          throw new Error(
+            '合约地址未加载！请先连接钱包。\n' +
+            '当前网络: ' + netName
+          );
+        }
+        throw new Error(
+          'CEAT 合约未找到！\n' +
+          '网络: ' + netName + '\n' +
+          '合约地址: ' + CEAT_ADDRESS + '\n' +
+          (isLocal
+            ? '请确认：\n  1) 已启动 npx hardhat node\n  2) 已部署: npx hardhat run scripts/local_deploy.js --network localhost\n  3) 已重启后端读取新的 .env'
+            : '请确认：\n  1) MetaMask 已连接到 Sepolia 测试网\n  2) 合约已部署到 Sepolia\n  3) 后端 .env 中 SEPOLIA_* 地址正确')
+        );
       }
 
-      showPending('paymentStatus', '请在 MetaMask 中确认支付...');
+      // 4. 计算金额
+      const finalPayable = currentPricing ? (currentPricing.total_after_discount || currentPricing.final_payable) : 0;
+      if (finalPayable <= 0) throw new Error('审计费用计算异常（金额为0），请刷新页面重试');
+      const CEAT_PRICE_USD = 0.05;
+      const tokenAmount = ethers.utils.parseUnits(String(Math.ceil(finalPayable / CEAT_PRICE_USD)), decimals);
+      const amountInCEAT = ethers.utils.formatUnits(tokenAmount, decimals);
 
-      const tx = await tokenContract.transfer(DAO_ADDRESS, tokenAmount);
-      await tx.wait();
+      // 5. 检查余额
+      showPending('paymentStatus', '正在检查账户余额...');
+      const userAddr = Wallet.getAddress();
+      const [balance, ethBalance] = await Promise.all([
+        tokenContract.balanceOf(userAddr),
+        provider.getBalance(userAddr)
+      ]);
 
-      showPending('paymentStatus', '正在确认支付状态...');
+      if (balance.lt(tokenAmount)) {
+        const balanceInCEAT = ethers.utils.formatUnits(balance, decimals);
+        throw new Error(
+          `CEAT 余额不足！\n` +
+          `当前余额: ${parseFloat(balanceInCEAT).toFixed(2)} ${symbol}\n` +
+          `需要支付: ${parseFloat(amountInCEAT).toFixed(2)} ${symbol}\n` +
+          `差额: ${(parseFloat(amountInCEAT) - parseFloat(balanceInCEAT)).toFixed(2)} ${symbol}\n\n` +
+          `解决方案：\n` +
+          (isLocal
+            ? '1. 在仪表盘的"购买CEAT"中先用 ETH 购买 CEAT\n' +
+              '2. 或使用 Hardhat 默认账户 (账户1 有 10000 CEAT)'
+            : '1. 在仪表盘用 Sepolia ETH 购买 CEAT\n' +
+              '2. 确保 MetaMask 中有足够的 Sepolia ETH')
+        );
+      }
 
-      await axios.post(`${BACKEND_API}/pricing/orders/${currentOrderId}/pay?tx_hash=${encodeURIComponent(tx.hash)}&wallet_address=${encodeURIComponent(Wallet.getAddress())}`);
+      if (ethBalance.lt(ethers.utils.parseEther('0.001'))) {
+        throw new Error(
+          `ETH 余额不足，无法支付 Gas 费！\n` +
+          `当前: ${parseFloat(ethers.utils.formatEther(ethBalance)).toFixed(6)} ETH\n` +
+          (isLocal
+            ? '本地测试: Hardhat 默认账户应有 10000 ETH\n请导入 Hardhat 测试账户私钥到 MetaMask'
+            : '请前往 Sepolia 水龙头获取测试 ETH:\nhttps://sepoliafaucet.com')
+        );
+      }
+
+      // 6. 发送支付交易
+      showPending('paymentStatus', `请在 MetaMask 中确认支付 ${parseFloat(amountInCEAT).toFixed(2)} ${symbol} → 合约 (${netName})...`);
+      const tx = await tokenContract.transfer(DAO_ADDRESS, tokenAmount, { gasLimit: isLocal ? 100000 : 200000 });
+      showPending('paymentStatus', '交易已发送，等待链上确认...');
+      const receipt = await tx.wait();
+
+      if (receipt.status !== 1) {
+        throw new Error(
+          '交易被回滚！可能原因：\n' +
+          '1. CEAT 转账失败（检查余额）\n' +
+          '2. 合约地址不正确\n' +
+          '3. Gas 费设置问题'
+        );
+      }
+
+      // 7. 通知后端
+      showPending('paymentStatus', '正在通知后端...');
+      await axios.post(`${BACKEND_API}/pricing/orders/${currentOrderId}/pay?tx_hash=${encodeURIComponent(tx.hash)}&wallet_address=${encodeURIComponent(userAddr)}`);
 
       onPaymentSuccess(tx.hash);
     } catch (e) {
-      const errorMsg = e.reason || e.message || '支付失败';
+      const errorMsg = e.reason || e.message || String(e);
       console.error('Payment error:', e);
-      if (errorMsg.includes('reverted')) {
-        showError('paymentStatus', '支付失败: 交易被回滚，请检查钱包余额或网络连接');
-      } else if (errorMsg.includes('user denied') || errorMsg.includes('rejected')) {
-        showError('paymentStatus', '支付失败: 用户取消了交易');
-      } else if (errorMsg.includes('Failed to fetch') || errorMsg.includes('network')) {
-        showError('paymentStatus', '支付失败: 网络连接异常，请检查：\n1. MetaMask 是否连接到 Sepolia 测试网\n2. 网络连接是否正常\n3. 刷新页面后重试');
-      } else if (errorMsg.includes('nonce') || errorMsg.includes('underpriced')) {
-        showError('paymentStatus', '支付失败: 交易排队拥堵，请等待几秒后重试');
+
+      if (e.code === 4001 || errorMsg.includes('user denied') || errorMsg.includes('rejected') || errorMsg.includes('cancelled')) {
+        showError('paymentStatus', '支付已取消。如需支付请重新点击按钮');
       } else {
-        showError('paymentStatus', '支付失败: ' + errorMsg);
+        showError('paymentStatus', errorMsg.replace(/\n/g, '<br>'));
       }
-      document.getElementById('payBtn').disabled = false;
+      payBtn.disabled = false;
     }
   }
 
@@ -934,6 +1011,18 @@
 
   function goToDashboard() {
     window.location.href = 'dashboard.html';
+  }
+
+  function goToProposalWriting() {
+    // 携带提案信息跳转到提案编写页面
+    var pid = document.getElementById('createdProposalId')?.textContent || '';
+    var codeHash = currentReportData?.task_info?.code_hash || '';
+    var contractAddr = currentReportData?.task_info?.contract_address || $('contractAddress').value || '';
+    var params = [];
+    if (pid && pid !== '-') params.push('proposal_id=' + encodeURIComponent(pid));
+    if (codeHash) params.push('code_hash=' + encodeURIComponent(codeHash));
+    if (contractAddr) params.push('contract=' + encodeURIComponent(contractAddr));
+    window.location.href = 'report-writing.html' + (params.length ? '?' + params.join('&') : '');
   }
 
   function goToAuditTeam() {

@@ -148,3 +148,79 @@ function showContractError(id, e) {
     el.innerHTML = result.text;
   }
 }
+
+// --- 网络切换功能（network-pill） ---
+
+function toggleNetworkDropdown(event) {
+  event.stopPropagation();
+  var dd = document.getElementById('networkDropdown');
+  dd.classList.toggle('show');
+  if (dd.classList.contains('show')) {
+    setTimeout(function() {
+      document.addEventListener('click', function closeDropdown() {
+        dd.classList.remove('show');
+        document.removeEventListener('click', closeDropdown);
+      }, { once: true });
+    }, 100);
+  }
+}
+
+async function switchNetworkTo(chainIdDec) {
+  var dd = document.getElementById('networkDropdown');
+  dd.classList.remove('show');
+  try {
+    document.getElementById('networkPillLabel').textContent = '切换中...';
+    if (typeof Wallet !== 'undefined' && Wallet.isConnected && Wallet.isConnected()) {
+      await Wallet.switchNetwork(chainIdDec === 31337 ? 'local' : 'sepolia');
+    } else {
+      await switchToChain(chainIdDec);
+      applyNetworkConfig(chainIdDec);
+      resetConfigCache();
+      await loadContractAddresses(chainIdDec);
+    }
+    updateNetworkPill();
+  } catch (e) {
+    console.error('网络切换失败:', e);
+    alert('网络切换失败: ' + (e.message || e));
+    updateNetworkPill();
+  }
+}
+
+async function updateNetworkPill() {
+  var pill = document.getElementById('networkPill');
+  var label = document.getElementById('networkPillLabel');
+  if (!pill || !label) return;
+  try {
+    var info;
+    if (typeof Wallet !== 'undefined' && Wallet.getCurrentNetworkInfo) {
+      info = await Wallet.getCurrentNetworkInfo();
+    } else {
+      info = {
+        chainId: CONFIG.CHAIN_ID_DEC || 31337,
+        isLocal: (CONFIG.CHAIN_ID_DEC || 31337) === 31337,
+        isSepolia: (CONFIG.CHAIN_ID_DEC || 31337) === 11155111,
+        networkName: (CONFIG.CHAIN_ID_DEC || 31337) === 31337 ? 'Local (31337)' : 'Sepolia'
+      };
+    }
+    pill.className = 'network-pill';
+    if (info.isLocal) {
+      pill.classList.add('local');
+      label.textContent = info.networkName || 'Hardhat Local';
+    } else if (info.isSepolia) {
+      pill.classList.add('sepolia');
+      label.textContent = info.networkName || 'Sepolia Testnet';
+    } else {
+      pill.classList.add('unknown');
+      label.textContent = info.networkName || 'Unknown';
+    }
+  } catch (e) {
+    pill.className = 'network-pill';
+    if ((CONFIG.CHAIN_ID_DEC || 31337) === 31337) {
+      pill.classList.add('local');
+      label.textContent = 'Hardhat Local';
+    } else {
+      pill.classList.add('sepolia');
+      label.textContent = 'Sepolia Testnet';
+    }
+  }
+}

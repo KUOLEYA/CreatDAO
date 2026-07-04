@@ -208,12 +208,6 @@
       .features-row { grid-template-columns: 1fr; }
     }
   </style>
-  <style>
-    .module-card .module-badge { position: absolute; top: 12px; right: 40px; font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600; letter-spacing: 0.3px; }
-    .module-badge.core { background: rgba(102,126,234,0.15); color: #9fa8da; }
-    .module-badge.tool { background: rgba(255,152,0,0.15); color: #ffcc80; }
-    .features-row { gap: 16px; }
-  </style>
 </head>
 <body>
   <div class="app-container">
@@ -234,58 +228,68 @@
       <div class="divider"></div>
     </div>
 
-    <div class="section-title">核心功能模块</div>
+    <div class="section-title">审计流程</div>
     <div class="module-grid">
-      <a class="module-card" href="dashboard.html">
-        <div class="module-icon purple">🏠</div>
-        <div class="module-title">用户端</div>
-        <div class="module-desc">质押 CEAT 代币，提交审计并参与社区投票</div>
-        <div class="module-arrow">→</div>
-      </a>
-      <a class="module-card" href="audit-team.html">
-        <div class="module-icon green">🔍</div>
-        <div class="module-title">审计团队端</div>
-        <div class="module-desc">接取提案并进行专业代码审计，提交审计报告</div>
-        <div class="module-arrow">→</div>
-      </a>
-      <a class="module-card" href="admin.html">
-        <div class="module-icon orange">⚙️</div>
-        <div class="module-title">管理端</div>
-        <div class="module-desc">合约配置、权限管理与系统参数设置</div>
-        <div class="module-arrow">→</div>
-      </a>
-      <a class="module-card" href="dispute-committee.html">
-        <div class="module-icon cyan">⚖️</div>
-        <div class="module-title">争议委员会</div>
-        <div class="module-desc">处理审计争议，行使否决权进行最终裁决</div>
-        <div class="module-arrow">→</div>
-      </a>
-    </div>
-
-    <div class="section-title">审计工具</div>
-    <div class="module-grid">
-      <a class="module-card" href="pricing.html">
-        <div class="module-icon orange">💰</div>
-        <div class="module-title">审计定价</div>
-        <div class="module-desc">选择服务档位，计算审计费用并创建订单</div>
-        <div class="module-arrow">→</div>
-      </a>
       <a class="module-card" href="ai-review.html">
         <div class="module-icon pink">🤖</div>
         <div class="module-title">提交审计</div>
-        <div class="module-desc">自动化智能合约安全快速筛查</div>
+        <div class="module-desc">上传合约，一站式完成定价、审计、支付与提案</div>
         <div class="module-arrow">→</div>
       </a>
       <a class="module-card" href="audit-report-query.html">
         <div class="module-icon purple">📋</div>
         <div class="module-title">查询审计报告</div>
-        <div class="module-desc">查询完整的审计报告内容与历史记录</div>
+        <div class="module-desc">查看审计报告与历史</div>
+        <div class="module-arrow">→</div>
+      </a>
+    </div>
+
+    <div class="section-title">核心功能模块</div>
+    <div class="module-grid">
+      <a class="module-card" href="admin.html">
+        <div class="module-icon orange">⚙️</div>
+        <div class="module-title">管理端</div>
+        <div class="module-desc">合约配置、权限管理</div>
+        <div class="module-arrow">→</div>
+      </a>
+      <a class="module-card" href="audit-team.html">
+        <div class="module-icon green">🔍</div>
+        <div class="module-title">审计团队端</div>
+        <div class="module-desc">认领提案，专业审计</div>
+        <div class="module-arrow">→</div>
+      </a>
+      <a class="module-card" href="dashboard.html">
+        <div class="module-icon purple">🏠</div>
+        <div class="module-title">用户端</div>
+        <div class="module-desc">质押、投票、社区参与</div>
+        <div class="module-arrow">→</div>
+      </a>
+      <a class="module-card" href="dispute-committee.html">
+        <div class="module-icon cyan">⚖️</div>
+        <div class="module-title">争议委员会</div>
+        <div class="module-desc">争议处理，最终裁决</div>
+        <div class="module-arrow">→</div>
+      </a>
+    </div>
+
+    <div class="section-title">报告与提案</div>
+    <div class="module-grid">
+      <a class="module-card" href="report-writing.html">
+        <div class="module-icon green">📝</div>
+        <div class="module-title">审计报告编写</div>
+        <div class="module-desc">审计团队提交报告</div>
         <div class="module-arrow">→</div>
       </a>
       <a class="module-card" href="community-report-writing.html">
-        <div class="module-icon green">📝</div>
+        <div class="module-icon cyan">📄</div>
         <div class="module-title">社区审计报告编写</div>
-        <div class="module-desc">编写社区审计报告，提交贡献度证明和防女巫攻击机制</div>
+        <div class="module-desc">社区成员提交方案</div>
+        <div class="module-arrow">→</div>
+      </a>
+      <a class="module-card" href="proposal-writing.html">
+        <div class="module-icon pink">📬</div>
+        <div class="module-title">提案撰写</div>
+        <div class="module-desc">创建并提交审计提案</div>
         <div class="module-arrow">→</div>
       </a>
     </div>
@@ -311,6 +315,27 @@
         <div class="feature-content">
           <h3>安全否决权</h3>
           <p>争议委员会终极安全阀机制</p>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🏆</div>
+        <div class="feature-content">
+          <h3>激励机制</h3>
+          <p>奖励正确贡献者，惩罚恶意行为</p>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📜</div>
+        <div class="feature-content">
+          <h3>链上存证</h3>
+          <p>报告哈希永久存证，防篡改</p>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <div class="feature-content">
+          <h3>自动化流程</h3>
+          <p>事件同步、自动任务、状态机</p>
         </div>
       </div>
     </div>

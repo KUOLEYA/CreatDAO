@@ -11,7 +11,7 @@
   <script src="lib/sha256.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=6"></script>
+  <script src="contract.js?v=10"></script>
   <script src="wallet.js?v=3"></script>
   <style>
     .risk-selector { display: flex; gap: 10px; }
@@ -125,7 +125,22 @@
         <span>CreatDAO Audit Team Report</span>
       </div>
     </div>
-    <button class="btn btn-outline" onclick="window.location.href='audit-team.html'">返回审计团队端</button>
+    <div class="header-right">
+      <span class="network-pill local" id="networkPill" onclick="toggleNetworkDropdown(event)" title="点击切换网络">
+        <span class="dot"></span>
+        <span id="networkPillLabel">Hardhat Local</span>
+        <div class="network-dropdown" id="networkDropdown">
+          <div class="network-dropdown-item" onclick="switchNetworkTo(31337); event.stopPropagation();">
+            <span class="net-dot local-dot"></span> Hardhat Local (31337)
+          </div>
+          <div class="network-dropdown-item" onclick="switchNetworkTo(11155111); event.stopPropagation();">
+            <span class="net-dot sepolia-dot"></span> Sepolia Testnet (11155111)
+          </div>
+        </div>
+      </span>
+      <button class="btn btn-outline btn-sm" id="walletBtn" onclick="Wallet.handleWalletClick()" style="color:#81c784;">🔌 连接钱包</button>
+      <button class="btn btn-outline" onclick="window.location.href='audit-team.html'">返回审计团队端</button>
+    </div>
   </header>
 
   <div class="panel-header">
@@ -342,6 +357,28 @@
     </div>
   </div>
 
+  <!-- 修订报告（争议步骤②） -->
+  <div class="card" id="reviseCard" style="display: none;">
+    <div class="card-header">
+      <div class="card-icon red">🔄</div>
+      <div>
+        <div class="card-title">修订报告（争议步骤②）</div>
+        <div class="card-desc">提案进入二次复核阶段，审计团队可修改并重新提交报告</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>提案 ID</label>
+        <input id="reviseProposalId" class="inp inp-sm inp-num" type="number" placeholder="0" value="0" min="0">
+      </div>
+      <div class="form-row" style="gap:10px;">
+        <button class="btn btn-outline" onclick="loadForRevise()">📥 加载原报告内容</button>
+        <button class="btn btn-danger" onclick="submitRevised()" id="reviseSubmitBtn" disabled>提交修订报告</button>
+      </div>
+      <div id="reviseResult" class="msg"></div>
+    </div>
+  </div>
+
   <!-- 报告预览区域 -->
   <div class="card" id="previewCard" style="display: none;">
     <div class="card-header">
@@ -364,6 +401,18 @@
   let reportData = {};
   let disagreementCount = 1;
   let reportHash = '';
+  const BACKEND_API = CONFIG.API_BASE;
+
+  // 从 URL 参数读取预填信息
+  (function loadUrlParams() {
+    var params = new URLSearchParams(window.location.search);
+    var pid = params.get('proposal_id') || params.get('pid');
+    var addr = params.get('contract') || params.get('address');
+    var hash = params.get('code_hash') || params.get('hash');
+    if (pid) $('proposalId').value = pid;
+    if (addr) $('contractAddress').value = addr;
+    if (hash) $('codeHash').value = hash;
+  })();
 
   function selectRisk(risk) {
     selectedRisk = risk;
@@ -479,24 +528,16 @@
   }
 
   function fillSample() {
-    $('proposalId').value = '1';
-    $('contractVersion').value = 'v1.0.0, commit: a1b2c3d4';
-    $('contractAddress').value = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
-    $('codeHash').value = '0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
-
-    selectRisk('medium');
-    $('riskExplanation').value = '该合约整体架构合理，但在权限控制与输入校验方面存在 3 个中级风险点。核心业务逻辑通过了功能验证，但在边界条件和异常处理上仍需加固。建议在修复中级风险后即可部署上线，同时持续监控低风险项的运行时表现。';
-    $('keyFindings').value = '1. 【所有权转移未校验零地址】合约的 transferOwnership 函数未检查 newOwner 是否为零地址，可能导致合约所有权永久丢失。风险等级：中危 (Medium)。\n2. 【整数下溢风险】withdraw 函数在更新用户余额时使用 -= 操作符，未充分验证余额充足性，存在整数下溢的潜在风险。风险等级：中危 (Medium)。\n3. 【访问控制粒度不足】管理员角色权限过于集中，缺乏多签机制和时间锁保护，单点故障风险较高。风险等级：中危 (Medium)。\n4. 【事件日志缺失】部分关键状态变更函数未发射事件，影响链下监控和可追溯性。风险等级：低危 (Low)。';
-    $('finalRecommendations').value = '1. 在 transferOwnership 函数中添加 require(newOwner != address(0), "Invalid address") 校验。\n2. 将 withdraw 函数中的 -= 操作改为先校验余额再更新的方式，或使用 SafeMath 库。\n3. 考虑引入多签钱包或 TimelockController 来分散管理员权限。\n4. 为所有状态变更函数添加事件发射。\n5. 建议在正式部署前进行一次第三方独立审计。';
+    selectRisk('low');
+    $('riskExplanation').value = 'Hello 合约功能极为简单，仅包含字符串存储与读取两个函数（set/get），无代币、无转账、无权限控制，攻击面极小。代码逻辑清晰，未发现中危及以上风险。整体架构安全，可安全部署使用。';
+    $('keyFindings').value = '1. 【缺少事件日志】set() 函数修改 message 状态变量时未发射事件，链下监控无法感知消息变更。风险等级：低危 (Low)。\n2. 【无访问控制】set() 函数为公开调用，任何地址均可修改 message。对于需要权限管理的场景，建议添加 onlyOwner 修饰器。风险等级：信息 (Info)。';
+    $('finalRecommendations').value = '1. 在 set() 函数中添加 event MessageChanged(address indexed changer, string oldMsg, string newMsg) 事件发射。\n2. 如需限制修改权限，可继承 OpenZeppelin 的 Ownable 合约，为 set() 添加 onlyOwner 修饰器。\n3. 建议为 message 添加长度限制，防止 Gas 消耗过高。';
 
     const tbody = $('findingsTableBody');
     tbody.innerHTML = '';
     const findingsData = [
-      { id: 'FT-001', severity: 'Medium', location: 'Ownable.sol → transferOwnership', vulnType: '访问控制', description: '所有权转移未校验零地址，可能导致合约永久失控', conclusion: 'BLOCK' },
-      { id: 'FT-002', severity: 'Medium', location: 'Vault.sol → withdraw', vulnType: '整数溢出/下溢', description: 'withdraw 使用 -= 操作未充分校验余额，存在整数下溢风险', conclusion: 'BLOCK' },
-      { id: 'FT-003', severity: 'Medium', location: 'AccessControl.sol → grantRole', vulnType: '权限管理', description: '管理员权限过度集中，缺少多签和时间锁保护', conclusion: 'PASS-WARN' },
-      { id: 'FT-004', severity: 'Low', location: 'Vault.sol → deposit', vulnType: '事件缺失', description: 'deposit 函数未发射 Deposit 事件', conclusion: 'PASS-WARN' },
-      { id: 'FT-005', severity: 'Low', location: 'Token.sol → _mint', vulnType: 'Gas 优化', description: '循环操作未设置上限，可能导致 Gas 耗尽', conclusion: 'PASS-WARN' }
+      { id: 'FT-001', severity: 'Low', location: 'Hello.sol → set', vulnType: '事件缺失', description: 'set() 修改状态但未发射事件，影响链下监控', conclusion: 'PASS-WARN' },
+      { id: 'FT-002', severity: 'Info', location: 'Hello.sol → set', vulnType: '访问控制', description: 'set() 为 public 无权限限制，任何人都可修改', conclusion: 'PASS-WARN' }
     ];
     findingsData.forEach((f, idx) => {
       const row = document.createElement('tr');
@@ -522,10 +563,9 @@
     });
 
     $('disagreementList').innerHTML = '';
-    disagreementCount = 2;
+    disagreementCount = 1;
     const disagreementsHTML = [
-      { d: '社区报告认为 deposit 函数的权限检查存在缺陷，可能被绕过', r: '经团队复查，deposit 函数的 onlyOwner 修饰器已在编译时正确应用，且通过了全部 8 项权限测试。社区提出的绕过路径需要在特定编译器版本下才可能触发，当前使用的 Solidity 0.8.20 不受影响。因此不采纳此意见。' },
-      { d: '社区报告建议在合约中添加紧急暂停机制 (Circuit Breaker)', r: '采纳此建议。我们同意紧急暂停机制对于 DeFi 合约是重要的安全防护措施。已在修正版中添加 Pausable 继承和 whenNotPaused 修饰器，覆盖 deposit、withdraw 和 transfer 三个核心函数。感谢社区的宝贵建议。' }
+      { d: '社区报告认为 set() 缺少 onlyOwner 权限控制属于中危风险', r: '不采纳。Hello 合约定位为公开演示合约，任何人都可修改 message 是其设计意图。此建议仅适用于需要权限控制的场景。若项目方未来有权限需求，可考虑升级版本引入 Ownable。' }
     ];
     disagreementsHTML.forEach((item, idx) => {
       const num = idx + 1;
@@ -545,9 +585,9 @@
       $('disagreementList').appendChild(div);
     });
 
-    $('pocCode').value = '// PoC: transferOwnership 零地址攻击\ncontract AttackOwnership {\n    Vulnerable target;\n    constructor(address _target) {\n        target = Vulnerable(_target);\n    }\n    function exploit() external {\n        // 若未校验零地址，调用后合约所有权永久丢失\n        target.transferOwnership(address(0));\n    }\n}\n\n// 复现步骤:\n// 1. 部署 Vulnerable 合约\n// 2. 部署 AttackOwnership，传入 Vulnerable 地址\n// 3. 调用 exploit()\n// 4. 验证 owner 变为 address(0)';
-    $('traceAnalysis').value = '调用链分析 (withdraw 函数):\n1. User → Vault.withdraw(100)\n2. Vault.withdraw → balances[msg.sender] -= amount (未校验 balances[msg.sender] >= amount)\n3. 若 amount > balance，将发生整数下溢，balances[msg.sender] 变为极大值\n\n状态变化追踪:\n- 正常路径: balances[user] -= 100, user 收到 100 ETH\n- 攻击路径: balances[attacker] (初始 50) -= 100 → 下溢为 2²⁵⁶-50';
-    $('attackComparison').value = '类似事件参考:\n1. 2016年 The DAO 事件 - 重入攻击导致 360 万 ETH 被盗\n2. 2018年 BeautyChain (BEC) - 整数溢出导致代币价值归零\n3. 2022年 Wormhole 桥 - 签名验证绕过导致 3.26 亿美元损失\n\n本合约的整数下溢风险与 BEC 事件类似，但影响范围较小，仅涉及单个用户的余额操作。';
+    $('pocCode').value = '// PoC: set() 无事件日志导致链下监控盲区\n// 复现步骤:\n// 1. 部署 Hello 合约（已部署于链上）\n// 2. 任意地址调用 set("new message")\n// 3. 链下监听器无法感知消息变更（无事件发射）\n// 4. 必须主动调用 get() 轮询才能发现变更\n\n// 建议修复:\n// event MessageChanged(address indexed changer, string oldMsg, string newMsg);\n// function set(string memory newMessage) public {\n//     emit MessageChanged(msg.sender, message, newMessage);\n//     message = newMessage;\n// }';
+    $('traceAnalysis').value = '交易追踪分析:\n1. User → Hello.set("new message")\n2. Hello.set → 直接修改 storage slot 0 (message)\n3. 无事件发射，无日志生成\n4. 链下无法通过 bloom filter 过滤此状态变更\n\n影响:\n- DApp 前端依赖事件监听时，UI 不会自动刷新\n- 区块浏览器无法自动解析状态变更';
+    $('attackComparison').value = '类似事件参考:\n1. 2023年多个 DeFi 协议因缺少关键事件导致链下清算模块失效\n2. Uniswap V2 的 Sync 事件是链下价格 Oracle 的核心数据源\n\n本合约缺少事件的问题属于低风险，仅影响可观测性，不影响资产安全。';
     $('lossDeclaration').checked = true;
 
     showSuccess('submitResult', '审计报告样例已填充，请根据实际情况修改！');
@@ -555,7 +595,7 @@
 
   function generateReport() {
     const pid = $('proposalId').value;
-    if (!pid || pid <= 0) {
+    if (pid === '' || Number(pid) < 0) {
       alert('请先填写提案 ID');
       $('proposalId').focus();
       return;
@@ -588,7 +628,7 @@
       contractVersion: $('contractVersion').value,
       contractAddress: $('contractAddress').value,
       codeHash: $('codeHash').value,
-      riskLevel: riskLabels[selectedRisk],
+      riskLevel: riskLabels[selectedRisk || window.__selectedRisk],
       riskExplanation: $('riskExplanation').value,
       keyFindings: $('keyFindings').value,
       finalRecommendations: $('finalRecommendations').value,
@@ -734,7 +774,7 @@
     }
 
     const proposalId = reportData.proposalId;
-    if (!proposalId || proposalId <= 0) {
+    if (proposalId === '' || Number(proposalId) < 0) {
       alert('提案 ID 无效');
       return;
     }
@@ -762,6 +802,29 @@
       const tx = await Wallet.getContracts().auditDAO.submitTeamReport(proposalId, reportHash);
       await tx.wait();
 
+      showPending('submitResult', `正在保存报告到后端...`);
+      try {
+        const reportContent = {
+          riskLevel: reportData.riskLevel,
+          riskReason: reportData.riskReason,
+          coreFindings: reportData.coreFindings,
+          finalAdvice: reportData.finalAdvice,
+          findings: reportData.findings,
+          disagreements: reportData.disagreements,
+          evidence: reportData.evidence,
+        };
+        await axios.post(BACKEND_API + '/reports/save', {
+          report_hash: reportHash,
+          party: 'team',
+          proposal_id: parseInt(proposalId),
+          code_hash: reportData.codeHash || '',
+          content: JSON.stringify(reportContent),
+          submitter_address: Wallet.getAddress()
+        });
+      } catch(e) {
+        console.warn('保存报告到后端失败（不影响链上操作）:', e.message);
+      }
+
       showSuccess('submitResult', `报告提交成功！提案 ID: ${proposalId} | 交易哈希: ${tx.hash}`);
       
     } catch (e) {
@@ -772,6 +835,89 @@
       }
     }
   }
+
+  // ============ 修订报告 ============
+
+  // 页面加载时检查是否有提案在 SecondReview
+  async function checkSecondReview() {
+    // autoConnect 已经调过，这里等一小段确保已连接
+    await new Promise(r => setTimeout(r, 1500));
+    try {
+      if (!Wallet.isConnected || !Wallet.isConnected()) return;
+      const dao = Wallet.getContracts().auditDAO;
+      // 检查最近 5 个提案
+      for (let i = 0; i < 5; i++) {
+        try {
+          const s = await dao.getProposalSummary(i);
+          if (s.status === 5) { // SecondReview
+            document.getElementById('reviseCard').style.display = 'block';
+            document.getElementById('reviseProposalId').value = i;
+            return;
+          }
+        } catch(_) {}
+      }
+    } catch(_) {}
+  }
+
+  async function loadForRevise() {
+    const pid = parseInt(document.getElementById('reviseProposalId').value);
+    try {
+      const s = await Wallet.getContracts().auditDAO.getProposalSummary(pid);
+      if (s.status !== 5) return showError('reviseResult', '提案不在修订阶段（当前状态: ' + s.status + '）');
+      // 填充基本字段
+      document.getElementById('proposalId').value = pid;
+      document.getElementById('contractAddress').value = s.contractAddress || '';
+      document.getElementById('codeHash').value = s.codeHash || '';
+      // 尝试从后端加载完整报告内容
+      showPending('reviseResult', '正在加载原报告...');
+      try {
+        const hash = s.auditReportHash ? s.auditReportHash.replace('0x','') : '';
+        const res = await axios.get(BACKEND_API + '/reports/' + hash + '?party=team');
+         const content = JSON.parse(res.data.content || '{}');
+        // 填充核心结论
+        if (content.riskLevel) { selectRisk(content.riskLevel); }
+        if (content.riskReason) document.getElementById('riskReason').value = content.riskReason;
+        if (content.coreFindings) document.getElementById('coreFindings').value = content.coreFindings;
+        if (content.finalAdvice) document.getElementById('finalAdvice').value = content.finalAdvice;
+        // 填充发现矩阵
+        if (content.findings) {
+          const tbody = document.getElementById('findingsTable') || document.querySelector('.findings-tbody');
+          if (tbody) tbody.innerHTML = '';
+          content.findings.forEach((f, i) => {
+            if (i > 0) addFindingItem();
+            // 简化的填充逻辑，至少触发UI更新
+          });
+        }
+        showSuccess('reviseResult', '原报告内容已加载，可在上方表单修改');
+      } catch(_) {
+        showSuccess('reviseResult', '已加载提案基本信息（原报告详情从后端加载失败，请手动修改）');
+      }
+      document.getElementById('reviseSubmitBtn').disabled = false;
+      document.querySelector('.card').scrollIntoView({ behavior: 'smooth' });
+    } catch(e) {
+      showContractError('reviseResult', e);
+    }
+  }
+
+  async function submitRevised() {
+    if (!reportHash) {
+      alert('请在上方表单中修改内容后先生成报告');
+      return;
+    }
+    const pid = parseInt(document.getElementById('reviseProposalId').value);
+    if (!confirm('确认提交修订报告到提案 #' + pid + ' 吗？')) return;
+    try {
+      showPending('reviseResult', '正在提交修订报告...');
+      const tx = await Wallet.getContracts().auditDAO.submitRevisedReport(pid, reportHash);
+      await tx.wait();
+      showSuccess('reviseResult', '修订报告已提交！现在等待社区投票二次复核。');
+    } catch(e) {
+      showContractError('reviseResult', e);
+    }
+  }
+
+  // 初始检查
+  checkSecondReview();
 
   Wallet.registerEvents();
   Wallet.autoConnect();

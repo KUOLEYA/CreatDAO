@@ -7,6 +7,11 @@ import threading
 import time
 import requests as http_requests
 from datetime import datetime, timedelta, timezone
+import os
+from dotenv import load_dotenv
+
+# 加载 .env 文件
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
 
 import models, schemas, database, contract_utils, audit_api
 from database import engine, get_db

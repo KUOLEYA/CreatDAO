@@ -10,7 +10,7 @@
   <script src="lib/axios.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=6"></script>
+  <script src="contract.js?v=10"></script>
   <script src="wallet.js?v=3"></script>
 
 </head>
@@ -25,12 +25,21 @@
         <span>CreatDAO Admin Panel</span>
       </div>
     </div>
-    <div class="wallet-area">
-      <span class="wallet-status" id="walletStatus">
-        <span class="dot-indicator disconnected"></span> 未连接
+    <div class="header-right">
+      <span class="network-pill local" id="networkPill" onclick="toggleNetworkDropdown(event)" title="点击切换网络">
+        <span class="dot"></span>
+        <span id="networkPillLabel">Hardhat Local</span>
+        <div class="network-dropdown" id="networkDropdown">
+          <div class="network-dropdown-item" onclick="switchNetworkTo(31337); event.stopPropagation();">
+            <span class="net-dot local-dot"></span> Hardhat Local (31337)
+          </div>
+          <div class="network-dropdown-item" onclick="switchNetworkTo(11155111); event.stopPropagation();">
+            <span class="net-dot sepolia-dot"></span> Sepolia Testnet (11155111)
+          </div>
+        </div>
       </span>
-      <button class="btn btn-primary" id="connectBtn" onclick="connectWallet()">连接钱包</button>
-      <button class="btn btn-outline btn-sm" onclick="window.location.href='home.html'">返回主页面</button>
+      <button class="btn btn-outline btn-sm" id="walletBtn" onclick="Wallet.handleWalletClick()" style="color:#81c784;">🔌 连接钱包</button>
+      <button class="btn btn-outline" onclick="window.location.href='home.html'">返回主页面</button>
     </div>
   </header>
 
@@ -91,11 +100,34 @@
         <label>提案 ID</label>
         <input id="finalizeProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
         <button class="btn btn-danger btn-sm" onclick="finalizeVoting()">提前结束投票</button>
+        <button class="btn btn-primary btn-sm" onclick="finalizeDiscussion()">结束讨论</button>
       </div>
       <div style="font-size:12px; color:rgba(255,255,255,0.4); margin-top: 6px;">
-        <span style="color:#ffcc80;">⚠️</span> 需为管理员地址调用
+        <span style="color:#ffcc80;">⚠️</span> 结束投票后需结束讨论才会结算奖励
       </div>
       <div id="finalizeResult" class="msg"></div>
+      <div class="divider"></div>
+      <!-- 争议管理 -->
+      <div style="font-weight:600; font-size:13px; margin-bottom:8px;">⚖️ 争议管理（3步流程）</div>
+      <div style="font-size:11px; color:rgba(255,255,255,0.45); margin-bottom:10px;">
+        步骤① 社区投票认可 → 步骤② 审计团队修订 → 步骤③ 委员会裁决
+      </div>
+      <div class="form-row">
+        <label>提案 ID</label>
+        <input id="disputeProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+      </div>
+      <div class="form-row">
+        <button class="btn btn-danger btn-sm" onclick="resolveDisputeStep1()">① 裁决争议第1步</button>
+      </div>
+      <div id="disputeStep1Result" class="msg"></div>
+      <div class="form-row" style="margin-top:4px;">
+        <button class="btn btn-danger btn-sm" onclick="resolveSecondReview()">② 裁决二次复核</button>
+      </div>
+      <div id="disputeStep2Result" class="msg"></div>
+      <div class="form-row" style="margin-top:4px;">
+        <button class="btn btn-outline btn-sm" onclick="checkDisputeStatus()">📋 查看争议状态</button>
+      </div>
+      <div id="disputeStatusResult" class="msg"></div>
     </div>
   </div>
 
@@ -205,8 +237,8 @@
     <div class="card-header">
       <div class="card-icon orange">&#9733;</div>
       <div>
-        <div class="card-title">设置争议委员奖励与惩罚</div>
-        <div class="card-desc">设置委员会成员正确投票的奖励率和错误投票的惩罚率（basis points）</div>
+        <div class="card-title">设置争议委员奖惩率</div>
+        <div class="card-desc">设置委员会成员正确投票的奖励率和错误投票的惩罚率（basis points，1000 = 10%）</div>
       </div>
     </div>
     <div class="card-body">
@@ -267,6 +299,14 @@
       </div>
     </div>
     <div class="card-body">
+      <div class="form-row">
+        <label>奖励池注资</label>
+        <input id="fundAmount" class="inp inp-sm inp-num" type="number" placeholder="CEAT" value="1000" style="width:120px;">
+        <button class="btn btn-success btn-sm" onclick="fundRewardPool()">注资</button>
+        <span style="font-size:12px;color:rgba(255,255,255,0.4);">合约余额: <span id="contractCEATBalance">-</span> CEAT</span>
+      </div>
+      <div id="fundResult" class="msg"></div>
+      <div class="divider"></div>
       <div class="form-row">
         <label>奖励接收</label>
         <input id="rewardRecipient" class="inp inp-addr" type="text" placeholder="0x...">
@@ -336,26 +376,20 @@
   const PROPOSAL_STATUS = CONFIG.PROPOSAL_STATUS;
 
   function _A() { return Wallet.getContracts().auditDAO; }
+  function _C() { return Wallet.getContracts().ceatToken; }
   function _T() { return Wallet.getContracts().teamManager; }
   function _S() { return Wallet.getSigner(); }
   function _U() { return Wallet.getAddress(); }
   function _P() { return Wallet.getProvider(); }
 
-  async function connectWallet() {
-    const btn = document.getElementById('connectBtn');
-    btn.disabled = true;
-    btn.textContent = '⏳ 连接中...';
-    try {
-      await Wallet.connect();
+  // --- 使用 Wallet.setCallbacks 处理连接后的页面逻辑 ---
+  Wallet.setCallbacks(
+    async function(addr) {
       refreshDebugInfo();
       await checkAccessPermission();
-      btn.textContent = '已连接';
-    } catch (e) {
-      btn.disabled = false;
-      btn.textContent = '连接钱包';
-      alert('连接钱包失败: ' + e.message);
-    }
-  }
+    },
+    function() {}
+  );
 
   async function checkAccessPermission() {
     if (!Wallet.getSigner() || !Wallet.getAddress()) return;
@@ -505,7 +539,7 @@
         await tx1.wait();
       } catch (submitErr) {
         const msg = (submitErr.data && submitErr.data.message) || submitErr.message || '';
-        if (!msg.includes('!hash') && !msg.toLowerCase().includes('already submitted') && !msg.toLowerCase().includes('hash exists') && !msg.includes('exist') && !msg.includes('submitted')) {
+        if (!msg.includes('!hash') && !msg.toLowerCase().includes('already submitted') && !msg.toLowerCase().includes('hash exists') && !msg.includes('exist') && !msg.includes('submitted') && !msg.includes('Insufficient stake') && !msg.includes('insufficient')) {
           throw submitErr;
         }
       }
@@ -529,6 +563,11 @@
         await tx2.wait();
       } catch (e) {
         const msg = (e.data && e.data.message) || e.message || '';
+        if (msg.includes('already') || msg.toLowerCase().includes('voting') || msg.toLowerCase().includes('status') || msg.toLowerCase().includes('hash exists') || msg.includes('exist') || msg.includes('Invalid duration')) {
+          el.className = 'msg info';
+          el.innerHTML = '<span style="flex-shrink:0;">ℹ</span> 提案 ' + pid + ' 投票已在运行中（无需重复操作）';
+          return;
+        }
         if (!msg.includes('Invalid duration') && !msg.includes('already') && !msg.toLowerCase().includes('hash exists') && !msg.includes('exist') && !msg.includes('voting') && !msg.includes('status')) {
           el.innerHTML = '两参数版本不可用，尝试单参数版本...';
           try {
@@ -557,7 +596,7 @@
       } else if (e.error && e.error.data && e.error.data.message) {
         errorMsg = e.error.data.message;
       }
-      const revertMatch = errorMsg.match(/reverted: (.+?)"/);
+      const revertMatch = errorMsg.match(/reverted with reason string '([^']+)'/);
       if (revertMatch) {
         errorMsg = revertMatch[1];
       }
@@ -582,6 +621,94 @@
       document.getElementById("finalizeResult").className = 'msg success';
       document.getElementById("finalizeResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 提案 ' + pid + ' 投票已结束';
     } catch (e) { showContractError("finalizeResult", e); }
+  }
+
+  async function finalizeDiscussion() {
+    if (!_S()) return alert("请先连接钱包");
+    const pid = document.getElementById("finalizeProposalId").value;
+    try {
+      document.getElementById("finalizeResult").className = 'msg pending';
+      document.getElementById("finalizeResult").innerHTML = '正在结束讨论并结算奖励...';
+      const tx = await _A().finalizeDiscussion(pid);
+      const receipt = await tx.wait();
+      // 检查事件判断走了哪个分支
+      const iface = new ethers.utils.Interface(ContractDefs.auditDAO_ABI);
+      let isConsensus = false;
+      let isDispute = false;
+      for (const log of receipt.logs) {
+        try {
+          const parsed = iface.parseLog(log);
+          if (parsed.name === 'DiscussionConsensus') isConsensus = true;
+          if (parsed.name === 'DisputeTriggered') isDispute = true;
+        } catch (_) {}
+      }
+      document.getElementById("finalizeResult").className = isConsensus ? 'msg success' : 'msg warn';
+      document.getElementById("finalizeResult").innerHTML = isConsensus
+        ? '<span>&#10004;</span> 提案 ' + pid + ' 达成共识，奖励已自动结算'
+        : '<span>&#9888;</span> 提案 ' + pid + ' 社区与审计团队意见不一致，已进入争议阶段（无奖励发放）';
+    } catch (e) { showContractError("finalizeResult", e); }
+  }
+
+  // ============ 争议管理 ============
+
+  function _dpid() { return document.getElementById("disputeProposalId").value; }
+
+  async function checkDisputeStatus() {
+    const pid = _dpid();
+    try {
+      const s = await _A().getProposalSummary(pid);
+      const names = ['Submitted','TeamReview','CommunityReview','Discussion','FirstDispute','SecondReview','CommitteeRuling','Arbitration','Finalized'];
+      document.getElementById("disputeStatusResult").className = 'msg success';
+      document.getElementById("disputeStatusResult").innerHTML = '提案 ' + pid + ' 当前状态: <b>' + (names[s.status]||s.status) + '</b> | 审计Hash: ' + s.auditReportHash.substring(0,10) + '... | 社区胜出Hash: ' + s.winningCommunityHash.substring(0,10) + '...';
+    } catch(e) { showContractError("disputeStatusResult", e); }
+  }
+
+  async function resolveDisputeStep1() {
+    if (!_S()) return alert("请先连接钱包");
+    const pid = _dpid();
+    try {
+      document.getElementById("disputeStep1Result").className = 'msg pending';
+      document.getElementById("disputeStep1Result").innerHTML = '正在裁决争议第1步...';
+      const tx = await _A().resolveDisputeStep1(pid);
+      const receipt = await tx.wait();
+      const iface = new ethers.utils.Interface(ContractDefs.auditDAO_ABI);
+      let isFinalized = false, isSecondReview = false;
+      for (const log of receipt.logs) {
+        try {
+          const p = iface.parseLog(log);
+          if (p.name === 'ProposalStatusChanged' && p.args.newStatus === 5) isSecondReview = true;
+          if (p.name === 'ReportDeposited') isFinalized = true;
+        } catch(_) {}
+      }
+      document.getElementById("disputeStep1Result").className = 'msg success';
+      document.getElementById("disputeStep1Result").innerHTML = isFinalized
+        ? '<span>&#10004;</span> 社区接受审计团队报告，提案已终结（奖励结算）'
+        : '<span>&#9888;</span> 社区拒绝审计团队报告，进入第2步：审计团队二次复核';
+    } catch(e) { showContractError("disputeStep1Result", e); }
+  }
+
+  async function resolveSecondReview() {
+    if (!_S()) return alert("请先连接钱包");
+    const pid = _dpid();
+    try {
+      document.getElementById("disputeStep2Result").className = 'msg pending';
+      document.getElementById("disputeStep2Result").innerHTML = '正在裁决二次复核...';
+      const tx = await _A().resolveSecondReview(pid);
+      const receipt = await tx.wait();
+      const iface = new ethers.utils.Interface(ContractDefs.auditDAO_ABI);
+      let isFinalized = false, isCommittee = false;
+      for (const log of receipt.logs) {
+        try {
+          const p = iface.parseLog(log);
+          if (p.name === 'ProposalStatusChanged' && p.args.newStatus === 6) isCommittee = true;
+          if (p.name === 'ReportDeposited') isFinalized = true;
+        } catch(_) {}
+      }
+      document.getElementById("disputeStep2Result").className = 'msg success';
+      document.getElementById("disputeStep2Result").innerHTML = isFinalized
+        ? '<span>&#10004;</span> 二次复核通过，提案已终结'
+        : '<span>&#9888;</span> 二次复核未通过，进入第3步：争议委员会裁决（请到 dispute-committee.html）';
+    } catch(e) { showContractError("disputeStep2Result", e); }
   }
 
   async function setAuditTeam() {
@@ -734,11 +861,14 @@
     if (!rewardRate || !penaltyRate) return alert("请输入奖励率和惩罚率");
     try {
       document.getElementById("committeeRewardPenaltyResult").className = 'msg pending';
-      document.getElementById("committeeRewardPenaltyResult").innerHTML = '正在设置...';
-      const tx = await _A().setCommitteeRewardPenaltyRates(rewardRate, penaltyRate);
-      await tx.wait();
+      document.getElementById("committeeRewardPenaltyResult").innerHTML = '正在设置奖励率...';
+      const tx1 = await _A().setCommitteeRewardRate(rewardRate);
+      await tx1.wait();
+      document.getElementById("committeeRewardPenaltyResult").innerHTML = '正在设置惩罚率...';
+      const tx2 = await _A().setCommitteePenaltyRate(penaltyRate);
+      await tx2.wait();
       document.getElementById("committeeRewardPenaltyResult").className = 'msg success';
-      document.getElementById("committeeRewardPenaltyResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 已设置：奖励率 ' + rewardRate + '，惩罚率 ' + penaltyRate;
+      document.getElementById("committeeRewardPenaltyResult").innerHTML = '&#10004; 已设置：奖励率 ' + rewardRate + ' bp，惩罚率 ' + penaltyRate + ' bp';
     } catch (e) { showContractError("committeeRewardPenaltyResult", e); }
   }
 
@@ -813,6 +943,39 @@
       document.getElementById("rewardResult").className = 'msg success';
       document.getElementById("rewardResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 已分配 ' + amount + ' CEAT 给 ' + recipient;
     } catch (e) { showContractError("rewardResult", e); }
+  }
+
+  // 加载合约 CEAT 余额
+  async function loadContractCEATBalance() {
+    try {
+      const ceat = _C();
+      if (!ceat) { document.getElementById("contractCEATBalance").textContent = '(需连接钱包)'; return; }
+      const bal = await ceat.balanceOf(CONFIG.AUDIT_DAO_ADDRESS);
+      document.getElementById("contractCEATBalance").textContent = parseFloat(ethers.utils.formatEther(bal)).toFixed(2);
+    } catch (e) { document.getElementById("contractCEATBalance").textContent = '(加载失败)'; }
+  }
+
+  // 向奖励池注资
+  async function fundRewardPool() {
+    if (!_S()) return alert("请先连接钱包");
+    const amount = document.getElementById("fundAmount").value;
+    if (!amount || parseFloat(amount) <= 0) return alert("请输入有效金额");
+    try {
+      const fundResult = document.getElementById("fundResult");
+      fundResult.className = 'msg pending';
+      fundResult.innerHTML = '正在授权...';
+      const ceat = _C();
+      const parsedAmount = ethers.utils.parseEther(amount);
+      // 先授权
+      const approveTx = await ceat.approve(CONFIG.AUDIT_DAO_ADDRESS, parsedAmount);
+      await approveTx.wait();
+      fundResult.innerHTML = '正在转账...';
+      const tx = await ceat.transfer(CONFIG.AUDIT_DAO_ADDRESS, parsedAmount);
+      await tx.wait();
+      await loadContractCEATBalance();
+      fundResult.className = 'msg success';
+      fundResult.innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 已向奖励池注入 ' + amount + ' CEAT';
+    } catch (e) { showContractError("fundResult", e); }
   }
 
   async function slashStake() {
@@ -898,6 +1061,7 @@
       const owner = await _A().owner();
       const auditTeam = await _A().auditTeam();
       document.getElementById("configInfo").innerText = JSON.stringify({ owner, auditTeam }, null, 2);
+      loadContractCEATBalance();
     } catch (e) {
       console.error('加载配置失败:', e);
       document.getElementById("configInfo").innerText = '加载配置失败: ' + e.message;

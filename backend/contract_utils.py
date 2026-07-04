@@ -35,8 +35,10 @@ def validate_hex_hash(raw_hash: str, label: str = "Hash") -> bytes:
 
 
 RPC_URLS = [
+    os.getenv("RPC_URL", ""),
     os.getenv("SEPOLIA_RPC_URL", "https://ethereum-sepolia-rpc.publicnode.com"),
 ]
+RPC_URLS = [url for url in RPC_URLS if url]  # 过滤空字符串
 
 def get_web3():
     for url in RPC_URLS:
@@ -61,13 +63,89 @@ def refresh_web3():
             ceat_token_contract = w3.eth.contract(address=CEAT_TOKEN_ADDRESS, abi=ceat_token_abi)
 
 ADMIN_PRIVATE_KEY = os.getenv("ADMIN_PRIVATE_KEY")
-AUDIT_DAO_ADDRESS = os.getenv("AUDIT_DAO_ADDRESS")
-CEAT_TOKEN_ADDRESS = os.getenv("CEAT_TOKEN_ADDRESS")
 
-if not AUDIT_DAO_ADDRESS:
-    raise ValueError("AUDIT_DAO_ADDRESS not set in .env")
-if not CEAT_TOKEN_ADDRESS:
-    raise ValueError("CEAT_TOKEN_ADDRESS not set in .env")
+# --- 双网络合约地址配置 ---
+# 第一套：本地 Hardhat 网络 (chainId=31337)
+LOCAL_AUDIT_DAO_ADDRESS = os.getenv("LOCAL_AUDIT_DAO_ADDRESS", "")
+LOCAL_CEAT_TOKEN_ADDRESS = os.getenv("LOCAL_CEAT_TOKEN_ADDRESS", "")
+LOCAL_TEAM_MANAGER_ADDRESS = os.getenv("LOCAL_TEAM_MANAGER_ADDRESS", "")
+
+# 第二套：Sepolia 测试网 (chainId=11155111)
+SEPOLIA_AUDIT_DAO_ADDRESS = os.getenv("SEPOLIA_AUDIT_DAO_ADDRESS", "")
+SEPOLIA_CEAT_TOKEN_ADDRESS = os.getenv("SEPOLIA_CEAT_TOKEN_ADDRESS", "")
+SEPOLIA_TEAM_MANAGER_ADDRESS = os.getenv("SEPOLIA_TEAM_MANAGER_ADDRESS", "")
+
+# 兼容旧版单地址配置（作为兜底/默认值）
+AUDIT_DAO_ADDRESS = os.getenv("AUDIT_DAO_ADDRESS", "")
+CEAT_TOKEN_ADDRESS = os.getenv("CEAT_TOKEN_ADDRESS", "")
+TEAM_MANAGER_ADDRESS = os.getenv("TEAM_MANAGER_ADDRESS", "")
+
+# 当前活跃网络地址（优先使用双网络配置，否则回退到单地址）
+_CURRENT_CHAIN_ID = int(os.getenv("CHAIN_ID", "31337"))
+
+def _get_address_for_chain(chain_id: int, prefix: str) -> str:
+    """根据 chainId 从对应的环境变量获取合约地址"""
+    if chain_id == 31337:
+        return os.getenv(f"LOCAL_{prefix}", "") or ""
+    elif chain_id == 11155111:
+        return os.getenv(f"SEPOLIA_{prefix}", "") or ""
+    return ""
+
+# 尝试从双网络配置获取地址
+_local_dao = _get_address_for_chain(31337, "AUDIT_DAO_ADDRESS")
+_local_ceat = _get_address_for_chain(31337, "CEAT_TOKEN_ADDRESS")
+_sepolia_dao = _get_address_for_chain(11155111, "AUDIT_DAO_ADDRESS")
+_sepolia_ceat = _get_address_for_chain(11155111, "CEAT_TOKEN_ADDRESS")
+
+# 如果双网络配置不存在，回退到单地址配置
+if not _local_dao: _local_dao = AUDIT_DAO_ADDRESS
+if not _local_ceat: _local_ceat = CEAT_TOKEN_ADDRESS
+if not _sepolia_dao: _sepolia_dao = AUDIT_DAO_ADDRESS
+if not _sepolia_ceat: _sepolia_ceat = CEAT_TOKEN_ADDRESS
+
+# 存储双网络地址映射
+NETWORK_ADDRESSES = {
+    31337: {
+        "AUDIT_DAO_ADDRESS": _local_dao or "请设置 LOCAL_AUDIT_DAO_ADDRESS 或 AUDIT_DAO_ADDRESS",
+        "CEAT_TOKEN_ADDRESS": _local_ceat or "请设置 LOCAL_CEAT_TOKEN_ADDRESS 或 CEAT_TOKEN_ADDRESS",
+        "TEAM_MANAGER_ADDRESS": os.getenv("LOCAL_TEAM_MANAGER_ADDRESS", "") or TEAM_MANAGER_ADDRESS,
+        "RPC_URL": os.getenv("RPC_URL", "http://127.0.0.1:8545"),
+        "NETWORK_NAME": "Hardhat Local",
+    },
+    11155111: {
+        "AUDIT_DAO_ADDRESS": _sepolia_dao or "请设置 SEPOLIA_AUDIT_DAO_ADDRESS 或 AUDIT_DAO_ADDRESS",
+        "CEAT_TOKEN_ADDRESS": _sepolia_ceat or "请设置 SEPOLIA_CEAT_TOKEN_ADDRESS 或 CEAT_TOKEN_ADDRESS",
+        "TEAM_MANAGER_ADDRESS": os.getenv("SEPOLIA_TEAM_MANAGER_ADDRESS", "") or TEAM_MANAGER_ADDRESS,
+        "RPC_URL": os.getenv("SEPOLIA_RPC_URL", "https://ethereum-sepolia-rpc.publicnode.com"),
+        "NETWORK_NAME": "Sepolia Testnet",
+    }
+}
+
+def get_network_addresses(chain_id: int = None) -> dict:
+    """获取指定网络的合约地址，默认返回当前活跃网络"""
+    if chain_id is None:
+        chain_id = _CURRENT_CHAIN_ID
+    return NETWORK_ADDRESSES.get(chain_id, NETWORK_ADDRESSES.get(_CURRENT_CHAIN_ID))
+
+# 当前活跃网络地址（供合约交互使用）
+_current_addrs = get_network_addresses(None)
+AUDIT_DAO_ADDRESS = _current_addrs["AUDIT_DAO_ADDRESS"]
+CEAT_TOKEN_ADDRESS = _current_addrs["CEAT_TOKEN_ADDRESS"]
+TEAM_MANAGER_ADDRESS = _current_addrs["TEAM_MANAGER_ADDRESS"]
+
+if not AUDIT_DAO_ADDRESS or "请设置" in AUDIT_DAO_ADDRESS:
+    raise ValueError(
+        "AUDIT_DAO_ADDRESS 未正确设置。请在 .env 中配置：\n"
+        "  本地: LOCAL_AUDIT_DAO_ADDRESS=0x...\n"
+        "  Sepolia: SEPOLIA_AUDIT_DAO_ADDRESS=0x...\n"
+        "  或运行: npx hardhat run scripts/local_deploy.js --network localhost"
+    )
+if not CEAT_TOKEN_ADDRESS or "请设置" in CEAT_TOKEN_ADDRESS:
+    raise ValueError(
+        "CEAT_TOKEN_ADDRESS 未正确设置。请在 .env 中配置：\n"
+        "  本地: LOCAL_CEAT_TOKEN_ADDRESS=0x...\n"
+        "  Sepolia: SEPOLIA_CEAT_TOKEN_ADDRESS=0x..."
+    )
 
 def load_abi(file_path):
     with open(file_path, 'r') as f:

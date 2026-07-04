@@ -10,7 +10,7 @@
   <script src="lib/axios.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=6"></script>
+  <script src="contract.js?v=10"></script>
   <script src="wallet.js?v=3"></script>
   <style>
     .wallet-area { display: flex; align-items: center; gap: 10px; }
@@ -55,12 +55,21 @@
         <span>CreatDAO Dispute Committee Panel</span>
       </div>
     </div>
-    <div class="wallet-area">
-      <span class="wallet-status" id="walletStatus">
-        <span class="dot-indicator disconnected"></span> 未连接
+    <div class="header-right">
+      <span class="network-pill local" id="networkPill" onclick="toggleNetworkDropdown(event)" title="点击切换网络">
+        <span class="dot"></span>
+        <span id="networkPillLabel">Hardhat Local</span>
+        <div class="network-dropdown" id="networkDropdown">
+          <div class="network-dropdown-item" onclick="switchNetworkTo(31337); event.stopPropagation();">
+            <span class="net-dot local-dot"></span> Hardhat Local (31337)
+          </div>
+          <div class="network-dropdown-item" onclick="switchNetworkTo(11155111); event.stopPropagation();">
+            <span class="net-dot sepolia-dot"></span> Sepolia Testnet (11155111)
+          </div>
+        </div>
       </span>
-      <button class="btn btn-primary" id="connectBtn" onclick="connectWallet()">连接钱包</button>
-      <button class="btn btn-outline btn-sm" onclick="window.location.href='home.html'">返回主页面</button>
+      <button class="btn btn-outline btn-sm" id="walletBtn" onclick="Wallet.handleWalletClick()" style="color:#81c784;">🔌 连接钱包</button>
+      <button class="btn btn-outline" onclick="window.location.href='home.html'">返回主页面</button>
     </div>
   </header>
 
@@ -165,7 +174,7 @@
   const auditDAO_ABI = [
     "function committeeVote(uint256 proposalId, bool supportAuditor) external",
     "function getCommitteeMembers() external view returns (address[] memory)",
-    "function getProposalSummary(uint256 proposalId) external view returns (tuple(uint256 id, bytes32 codeHash, bytes32 auditReportHash, bytes32 winningCommunityHash, bytes32 secondReviewHash, uint8 status, uint8 riskLevel, uint256 createdAt, uint256 disputeCreatedAt, bool arbitrationRequested, bool vetoRequested, bool vetoApproved))",
+    "function getProposalSummary(uint256 proposalId) external view returns (uint256 id, bytes32 codeHash, bytes32 auditReportHash, bytes32 winningCommunityHash, bytes32 secondReviewHash, uint8 status, uint8 riskLevel, uint256 createdAt, uint256 disputeCreatedAt, bool arbitrationRequested)",
     "function owner() external view returns (address)",
     "function auditTeam() external view returns (address)",
     "function isCommitteeMember(address member) external view returns (bool)"
@@ -179,25 +188,13 @@
 
 
 
-  async function connectWallet() {
-    const btn = document.getElementById('connectBtn');
-    btn.disabled = true;
-    btn.textContent = '⏳ 连接中...';
-    try {
-      var ok = await Wallet.connect();
-      if (ok) {
-        btn.textContent = '已连接';
-        await checkAccessPermission();
-      } else {
-        btn.disabled = false;
-        btn.textContent = '连接钱包';
-      }
-    } catch (e) {
-      btn.disabled = false;
-      btn.textContent = '连接钱包';
-      console.error('Connect wallet failed:', e);
-    }
-  }
+  // --- 使用 Wallet.setCallbacks 处理连接后的页面逻辑 ---
+  Wallet.setCallbacks(
+    async function(addr) {
+      await checkAccessPermission();
+    },
+    function() {}
+  );
 
   async function checkAccessPermission() {
     if (!Wallet.isConnected()) return;
@@ -267,7 +264,7 @@
       } else if (e.error && e.error.data && e.error.data.message) {
         errorMsg = e.error.data.message;
       }
-      const revertMatch = errorMsg.match(/reverted: (.+?)"/);
+      const revertMatch = errorMsg.match(/reverted with reason string '([^']+)'/);
       if (revertMatch) {
         errorMsg = revertMatch[1];
       }

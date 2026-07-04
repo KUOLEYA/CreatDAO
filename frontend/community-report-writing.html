@@ -11,7 +11,7 @@
   <script src="lib/sha256.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=6"></script>
+  <script src="contract.js?v=10"></script>
   <script src="wallet.js?v=3"></script>
   <style>
     .report-preview {
@@ -100,7 +100,7 @@
       border: 1px solid rgba(102,126,234,0.15);
       border-radius: 10px;
       padding: 14px;
-      margin-bottom: 10px;
+      margin-bottom: 16px;
     }
     .signature-item .sig-header {
       display: flex;
@@ -158,7 +158,22 @@
         <span>CreatDAO Community Audit Report</span>
       </div>
     </div>
-    <button class="btn btn-outline" onclick="window.location.href='dashboard.html'">返回用户端</button>
+    <div class="header-right">
+      <span class="network-pill local" id="networkPill" onclick="toggleNetworkDropdown(event)" title="点击切换网络">
+        <span class="dot"></span>
+        <span id="networkPillLabel">Hardhat Local</span>
+        <div class="network-dropdown" id="networkDropdown">
+          <div class="network-dropdown-item" onclick="switchNetworkTo(31337); event.stopPropagation();">
+            <span class="net-dot local-dot"></span> Hardhat Local (31337)
+          </div>
+          <div class="network-dropdown-item" onclick="switchNetworkTo(11155111); event.stopPropagation();">
+            <span class="net-dot sepolia-dot"></span> Sepolia Testnet (11155111)
+          </div>
+        </div>
+      </span>
+      <button class="btn btn-outline btn-sm" id="walletBtn" onclick="Wallet.handleWalletClick()" style="color:#81c784;">🔌 连接钱包</button>
+      <button class="btn btn-outline" onclick="window.location.href='dashboard.html'">返回用户端</button>
+    </div>
   </header>
 
   <div class="panel-header">
@@ -181,7 +196,7 @@
         <label>提案 ID</label>
         <input id="proposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
         <label>代码哈希</label>
-        <input id="codeHash" class="inp inp-hash" type="text" placeholder="0x..." readonly>
+        <input id="codeHash" class="inp inp-hash" type="text" placeholder="0x...">
       </div>
       <div class="form-row">
         <label>合约地址</label>
@@ -467,7 +482,7 @@
 
   async function loadProposalInfo() {
     const pid = $('proposalId').value;
-    if (!pid || pid <= 0) {
+    if (pid === '' || Number(pid) < 0) {
       showInfo('proposalInfoMsg', '请输入提案 ID 后加载');
       return;
     }
@@ -476,6 +491,7 @@
       const r = await axios.get(BACKEND_API + '/proposals/' + pid + '/full-info');
       const data = r.data;
       $('codeHash').value = data['代码哈希(codeHash)'] || '';
+      $('contractAddress').value = data['合约地址(contractAddress)'] || '';
       $('consensusProposalId').value = data['提案ID'] || pid;
       $('proposalStatus').innerText = '状态: ' + (data['状态(中文)'] || data['状态'] || 'Unknown');
       showSuccess('proposalInfoMsg', '提案信息加载成功');
@@ -487,7 +503,7 @@
   async function loadExistingReport() {
     const pid = $('proposalId').value;
     const addr = _U();
-    if (!pid || pid <= 0 || !addr) return;
+    if (!pid || Number(pid) < 0 || !addr) return;
     try {
       const r = await axios.get(BACKEND_API + '/community-report/' + pid + '/' + addr);
       const data = r.data;
@@ -791,7 +807,7 @@
 
   function generateReport() {
     const pid = $('proposalId').value;
-    if (!pid || pid <= 0) {
+    if (pid === '' || Number(pid) < 0) {
       alert('请先填写提案 ID');
       $('proposalId').focus();
       return;
@@ -1026,7 +1042,7 @@
       return;
     }
     const proposalId = parseInt(reportData.proposalId);
-    if (!proposalId || proposalId <= 0) {
+    if (Number.isNaN(proposalId) || proposalId < 0) {
       alert('提案 ID 无效');
       return;
     }
@@ -1078,69 +1094,66 @@
   }
 
   function fillSample() {
-    $('contractAddress').value = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
-    $('consensusProposalId').value = $('proposalId').value || '1';
-    $('snapshotBlockHeight').value = '6789012';
+    // 使用页面已加载的合约地址和提案ID（由 loadProposalInfo 填入）
+    var addr = $('contractAddress').value || '0xc6e7DF5E7b4f2A278906862b61205850344D4e7d';
+    $('contractAddress').value = addr;
+    $('consensusProposalId').value = $('proposalId').value || '0';
+    $('snapshotBlockHeight').value = '100';
+
+    // 当前连接的钱包地址（作为主签名者和第一贡献者）
+    var myAddr = _U() || '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC';
+    // 其他参与测试的社区用户地址
+    var otherAddrs = [
+      '0x90F79bf6EB2c4f870365E785982E1f101E93b906',
+      '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'
+    ];
 
     var voteList = $('voteOptionsList');
     voteList.innerHTML = '';
     [
-      { hash: '0xa1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2', votes: 1250, pct: '42.3%' },
-      { hash: '0xf1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4', votes: 890, pct: '30.1%' },
-      { hash: '0x9876abcdef1234567890abcdef1234567890abcdef1234567890abcdef123456', votes: 520, pct: '17.6%' }
+      { hash: '0x' + 'a'.repeat(64), votes: 1500, pct: '50.0%' },
+      { hash: '0x' + 'b'.repeat(64), votes: 900, pct: '30.0%' },
+      { hash: '0x' + 'c'.repeat(64), votes: 600, pct: '20.0%' }
     ].forEach(function(opt) {
       addVoteOptionInternal(opt.hash, opt.votes, opt.pct);
     });
-    $('voteSummary').value = '投票于区块高度 6789012 进行快照。共计 2960 票参与投票，覆盖 85% 的活跃质押者。投票过程在链上公开透明，所有交易哈希可通过 Sepolia 区块浏览器验证。';
+    $('voteSummary').value = '社区投票在 Hardhat 本地网络进行快照。共计 3000 CEAT 质押权重参与投票，覆盖所有活跃质押者。投票过程在链上公开透明。';
 
     var contribList = $('contributorsList');
     contribList.innerHTML = '';
-    [{
-      addr: '0x1234567890abcdef1234567890abcdef12345678',
-      disc: '发现 transferOwnership 函数未校验零地址，存在所有权永久丢失风险',
-      first: true, quality: 'excellent', fix: true,
-      fixdesc: '添加 require(newOwner != address(0)) 校验',
-      score: 95
-    }, {
-      addr: '0xabcdef1234567890abcdef1234567890abcdef12',
-      disc: '发现 withdraw 函数存在整数下溢风险，建议使用 SafeMath 或先校验余额',
-      first: true, quality: 'good', fix: true,
-      fixdesc: '引入 SafeMath 库进行安全的数学运算',
-      score: 85
-    }, {
-      addr: '0x7890abcdef1234567890abcdef1234567890abcd',
-      disc: '发现管理员权限过度集中，建议引入多签机制和时间锁',
-      first: false, quality: 'good', fix: false,
-      fixdesc: '',
-      score: 60
-    }].forEach(function(c) {
-      addContributorInternal(c.addr, c.disc, c.first, c.quality, c.fix, c.fixdesc, c.score);
-    });
-    $('contributionProofSummary').value = '共计 3 位贡献者参与本提案的社区审计。其中 2 位为首次发现者，贡献度显著。所有贡献者地址均通过质押门槛验证（≥600 CEAT），确保不存在女巫攻击。贡献度评分综合考虑了发现的重要性、是否为首次发现、报告质量和是否提供有效修复方案四个维度。';
+    // 当前用户作为第一个贡献者
+    addContributorInternal(myAddr, 'Hello.sol set() 函数修改状态变量时未发射事件，导致链下监控无法感知消息变更', true, 'excellent', true, '添加 event MessageChanged(address indexed changer, string oldMsg, string newMsg) 并在 set() 中发射', 90);
+    // 其他用户作为次要贡献者
+    addContributorInternal(otherAddrs[0], 'set() 为 public 无访问控制，任何地址均可修改 message', false, 'good', true, '继承 OpenZeppelin Ownable，为 set() 添加 onlyOwner 修饰器', 75);
+    addContributorInternal(otherAddrs[1], '建议为 message 添加长度限制，防止 Gas 消耗过高', false, 'good', true, '添加 require(bytes(newMessage).length <= 256) 校验', 60);
+    $('contributionProofSummary').value = '共计 3 位贡献者参与本提案的社区审计。所有贡献者地址均通过质押门槛验证（>=500 CEAT），确保不存在女巫攻击。贡献度评分综合了发现重要性、是否首次发现、报告质量和修复方案四个维度。';
 
     var alignList = $('alignmentItemsList');
     alignList.innerHTML = '';
-    [{
-      finding: '审计团队认为 deposit 函数的权限检查存在缺陷',
-      response: '社区同意审计团队的结论，但进一步建议增加 reentrancyGuard 防护。社区验证了 onlyOwner 修饰器在 Solidity 0.8.20 版本下的行为完全正确，建议增加额外的安全层。',
-      result: 'partial'
-    }, {
-      finding: '审计团队建议添加紧急暂停机制',
-      response: '完全同意审计团队的建议。社区已实现 Pausable 继承方案并提供测试用例验证了暂停/恢复功能在 deposit、withdraw、transfer 三个核心函数上的正确性。',
-      result: 'agree'
-    }].forEach(function(item) {
+    [
+      { finding: '审计团队认为 set() 缺少事件日志属于低危风险', response: '社区完全同意审计团队的结论。Hello 合约作为公开演示合约，缺少事件不影响安全性，但确实影响可观测性。建议在正式环境中务必添加事件发射。', result: 'agree' },
+      { finding: '审计团队认为 set() 无访问控制属于信息提示级别', response: '社区部分同意。对于需要权限管理的场景应引入 Ownable，但对于公开演示场景，任何人可修改是设计意图。建议项目方明确使用场景后决定。', result: 'partial' }
+    ].forEach(function(item) {
       addAlignmentItemInternal(item.finding, item.response, item.result);
     });
-    $('overallEvaluation').value = '社区整体认可审计团队的审计方法和结论。审计团队的审查覆盖了所有权管理、数值运算安全和权限控制等关键领域，方法科学合理。社区在此基础上补充了贡献度评估和防女巫攻击机制，以确保后续代币奖励分配的公平性。';
-    $('antiSybilDescription').value = '本报告采用以下机制防止女巫攻击：1) 所有贡献者需通过 ≥600 CEAT 质押门槛验证，增加攻击成本；2) 地址聚类分析，排除短时间内大量注册的相似地址；3) 行为模式检测，排除仅参与但不产生实质贡献的地址；4) 链上身份关联分析，排除已知的 Sybil 攻击地址集群。';
+    $('overallEvaluation').value = '社区整体认可审计团队的审计方法和结论。审计覆盖了事件缺失、访问控制和 Gas 优化等关键领域，方法科学合理。Hello 合约功能简单，攻击面极小，整体安全可控，可安全部署使用。';
+    $('antiSybilDescription').value = '本报告采用以下机制防止女巫攻击：1) 所有贡献者需通过 >=500 CEAT 质押门槛验证，增加攻击成本；2) 链上地址关联分析，排除短时间内大量注册的相似地址；3) 行为模式检测，排除仅参与但不产生实质贡献的地址。';
 
+    // 签名：当前用户地址排第一且时间最早，其余在一小时内随机
     var sigList = $('signaturesList');
     sigList.innerHTML = '';
     $('signatureMethod').value = 'multisig';
-    addSignatureInternal('0x1111222233334444555566667777888899990000', '', '2025-03-15T10:30');
-    addSignatureInternal('0xaaaabbbbccccddddeeeeffff1111222233334444', '', '2025-03-15T11:00');
+    var now = new Date();
+    var t1 = new Date(now.getTime() - 60 * 60000).toISOString().slice(0, 16); // 当前账户：1小时前
+    var t2 = new Date(now.getTime() - Math.floor(Math.random() * 3600000)).toISOString().slice(0, 16);
+    var t3 = new Date(now.getTime() - Math.floor(Math.random() * 3600000)).toISOString().slice(0, 16);
+    // 排序让显示更自然，当前账户最早
+    var otherTimes = [t2, t3].sort();
+    addSignatureInternal(myAddr, '', t1);
+    addSignatureInternal(otherAddrs[0], '', otherTimes[0]);
+    addSignatureInternal(otherAddrs[1], '', otherTimes[1]);
 
-    showSuccess('submitResult', '样例已填充，请根据实际情况修改！');
+    showSuccess('submitResult', '样例已填充（签名者: ' + getShortAddr(myAddr) + '），请根据实际情况修改！');
   }
 
   Wallet.registerEvents();

@@ -10,7 +10,7 @@
   <script src="lib/ethers.min.js?v=2"></script>
   <script src="lib/axios.min.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=6"></script>
+  <script src="contract.js?v=10"></script>
   <script src="wallet.js?v=3"></script>
   <style>
     .pricing-grid {
@@ -140,10 +140,22 @@
           <span>基础费 + 赏金池抽成 + 争议费 · 透明定价</span>
         </div>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;align-items:center;">
         <button class="btn btn-outline" onclick="window.location.href='index.html'">🏠 主页</button>
         <button class="btn btn-outline" onclick="window.location.href='ai-review.html'">🔍 提交审计</button>
-        <button class="btn btn-outline" id="btnConnect" onclick="connectWallet()">🔌 连接钱包</button>
+        <span class="network-pill local" id="networkPill" onclick="toggleNetworkDropdown(event)" title="点击切换网络">
+        <span class="dot"></span>
+        <span id="networkPillLabel">Hardhat Local</span>
+        <div class="network-dropdown" id="networkDropdown">
+          <div class="network-dropdown-item" onclick="switchNetworkTo(31337); event.stopPropagation();">
+            <span class="net-dot local-dot"></span> Hardhat Local (31337)
+          </div>
+          <div class="network-dropdown-item" onclick="switchNetworkTo(11155111); event.stopPropagation();">
+            <span class="net-dot sepolia-dot"></span> Sepolia Testnet (11155111)
+          </div>
+        </div>
+      </span>
+        <button class="btn btn-outline btn-sm" id="walletBtn" onclick="Wallet.handleWalletClick()" style="color:#81c784;">🔌 连接钱包</button>
       </div>
     </div>
 
@@ -420,27 +432,15 @@
       });
     });
 
-    async function connectWallet() {
-      const el = document.getElementById('btnConnect');
-      el.disabled = true;
-      const originalText = el.textContent;
-      el.textContent = '⏳ 连接中...';
-      try {
-        const ok = await Wallet.connect();
-        if (ok) {
-          walletAddress = Wallet.getAddress();
-          el.textContent = walletAddress.slice(0, 6) + '...' + walletAddress.slice(-4);
-          el.classList.add('btn-primary');
-        } else {
-          el.textContent = originalText;
-        }
-      } catch (e) {
-        el.textContent = originalText;
-        console.error('Connect wallet failed:', e);
-      } finally {
-        el.disabled = false;
+    // --- 使用 Wallet.setCallbacks 处理连接后的页面逻辑 ---
+    Wallet.setCallbacks(
+      function(addr) {
+        walletAddress = addr;
+      },
+      function() {
+        walletAddress = null;
       }
-    }
+    );
 
     async function createOrder() {
       const projectName = document.getElementById('orderProjectName').value.trim();

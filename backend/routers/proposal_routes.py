@@ -25,6 +25,24 @@ from contract_utils import (
 router = APIRouter(prefix="/api", tags=["proposals"])
 
 
+def _get_contract_address_from_audit_report(code_hash: str, db: Session) -> str:
+    """从 audit_reports 表根据 code_hash 反查合约地址"""
+    try:
+        normalized = code_hash.lower()
+        if normalized.startswith("0x"):
+            normalized = "0x" + normalized[2:].lower()
+        else:
+            normalized = "0x" + normalized.lower()
+        report = db.query(models.AuditReport).filter(
+            models.AuditReport.code_hash == normalized
+        ).first()
+        if report and report.contract_address:
+            return report.contract_address
+    except Exception:
+        pass
+    return ""
+
+
 @router.post("/admin/create-proposal", response_model=schemas.ProposalResponse)
 def create_proposal(req: schemas.CreateProposalRequest, db: Session = Depends(get_db)):
     try:
@@ -44,15 +62,25 @@ def create_proposal(req: schemas.CreateProposalRequest, db: Session = Depends(ge
         # 标准化 code_hash：确保带 0x 前缀
         normalized_hash = req.code_hash if req.code_hash.startswith("0x") else "0x" + req.code_hash
 
-        db_proposal = models.Proposal(
-            proposal_id=proposal_id,
-            code_hash=normalized_hash,
-            status="Submitted",
-            description=req.description or "",
-            created_at=datetime.now(timezone.utc)
-        )
-        db.add(db_proposal)
-        db.commit()
+        # 检查是否已被事件监听器同步插入（upsert）
+        existing = db.query(models.Proposal).filter_by(proposal_id=proposal_id).first()
+        if existing:
+            # 事件监听器已插入，只补全缺失字段
+            if not existing.code_hash or existing.code_hash == "0x":
+                existing.code_hash = normalized_hash
+            if req.description:
+                existing.description = req.description
+            db.commit()
+        else:
+            db_proposal = models.Proposal(
+                proposal_id=proposal_id,
+                code_hash=normalized_hash,
+                status="Submitted",
+                description=req.description or "",
+                created_at=datetime.now(timezone.utc)
+            )
+            db.add(db_proposal)
+            db.commit()
 
         return {"proposal_id": proposal_id}
     except HTTPException:
@@ -158,7 +186,13 @@ def transfer_ownership(req: schemas.TransferOwnershipRequest, db: Session = Depe
 
 @router.get("/proposals", response_model=List[schemas.ProposalBase])
 def get_proposals(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    proposals = db.query(models.Proposal).offset(skip).limit(limit).all()
+    try:
+        next_id = audit_dao_contract.functions.nextProposalId().call()
+    except Exception:
+        next_id = 0
+    proposals = db.query(models.Proposal).filter(
+        models.Proposal.proposal_id < next_id
+    ).offset(skip).limit(limit).all()
     return proposals
 
 
@@ -180,8 +214,15 @@ def get_unpublished_proposals(db: Session = Depends(get_db)):
 
 @router.get("/audit-team/available-proposals", response_model=List[schemas.ProposalBase])
 def get_available_proposals(db: Session = Depends(get_db)):
+    # 从链上获取真实存在的提案数量，过滤掉数据库中可能存在的虚假记录
+    try:
+        next_id = audit_dao_contract.functions.nextProposalId().call()
+    except Exception:
+        next_id = 0
+    
     available_proposals = db.query(models.Proposal).filter(
-        models.Proposal.status == "Submitted"
+        models.Proposal.status.in_(["Submitted", "TeamReview"]),
+        models.Proposal.proposal_id < next_id
     ).all()
     return available_proposals
 
@@ -189,7 +230,13 @@ def get_available_proposals(db: Session = Depends(get_db)):
 @router.get("/audit-team/all-proposals", response_model=List[schemas.ProposalBase])
 def get_all_proposals_for_audit_team(db: Session = Depends(get_db)):
     try:
-        all_proposals = db.query(models.Proposal).all()
+        next_id = audit_dao_contract.functions.nextProposalId().call()
+    except Exception:
+        next_id = 0
+    try:
+        all_proposals = db.query(models.Proposal).filter(
+            models.Proposal.proposal_id < next_id
+        ).all()
         return all_proposals
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -204,14 +251,11 @@ def claim_proposal(req: schemas.ClaimProposalRequest, db: Session = Depends(get_
     if not db_proposal:
         raise HTTPException(status_code=404, detail="提案不存在")
 
-    if db_proposal.status != "Submitted":
+    if db_proposal.status not in ["Submitted", "TeamReview"]:
         raise HTTPException(status_code=400, detail="该提案当前状态不允许接取")
 
-    db_proposal.status = "TeamReview"
-    db.commit()
-    db.refresh(db_proposal)
-
-    return {"status": "success", "proposal_id": req.proposal_id, "new_status": "TeamReview"}
+    # 不改变提案状态，允许多人领取同一条提案
+    return {"status": "success", "proposal_id": req.proposal_id, "current_status": db_proposal.status}
 
 
 @router.get("/proposals/{proposal_id}/full-info")
@@ -261,7 +305,8 @@ def get_proposal_full_info(proposal_id: int, db: Session = Depends(get_db)):
             "社区方案总数": len(community_proposals),
             "社区方案详情": community_proposals,
             "链下描述": getattr(db_proposal, 'description', None) if db_proposal else None,
-            "AI筛查报告": getattr(db_proposal, 'ai_screening_report', None) if db_proposal else None
+            "AI筛查报告": getattr(db_proposal, 'ai_screening_report', None) if db_proposal else None,
+            "合约地址(contractAddress)": _get_contract_address_from_audit_report(code_hash, db)
         }
         return result
     except Exception as e:

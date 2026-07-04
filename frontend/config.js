@@ -6,14 +6,37 @@ const CONFIG = {
     return '/api';
   })(),
 
-  AUDIT_DAO_ADDRESS: '0x90badefFb1d35B0720c32073E6803a72aA41E005',
-  CEAT_TOKEN_ADDRESS: '0x5Ae3d5bDC852D8f88B9ad2dde31bc4721cB6E523',
-  MULTISIG_ADDRESS: '0x431eA6ff1EfBD9F03AC910F15E44EC1FDc10194a',
-  TEAM_MANAGER_ADDRESS: '0xa2823165Bdab1BFB7C9C0560D39380BD0BF855b3',
-  AUDIT_CERTIFICATE_ADDRESS: '0xD112Ad0e4E287Ce31536a7c5955490F0cD3980d0',
+  // 默认合约地址（会被 loadContractAddresses() 覆盖）
+  AUDIT_DAO_ADDRESS: '0x322813Fd9A801c5507c9de605d63CEA4f2CE6c44',
+  CEAT_TOKEN_ADDRESS: '0xc6e7DF5E7b4f2A278906862b61205850344D4e7d',
+  MULTISIG_ADDRESS: '0x322813Fd9A801c5507c9de605d63CEA4f2CE6c44',
+  TEAM_MANAGER_ADDRESS: '0x4ed7c70F96B99c776995fB64377f0d4aB3B0e1C1',
+  AUDIT_CERTIFICATE_ADDRESS: '0x322813Fd9A801c5507c9de605d63CEA4f2CE6c44',
 
-  SEPOLIA_CHAIN_ID: '0xaa36a7',
+  // 当前活跃网络（动态检测）
+  CHAIN_ID: '0x7a69',
+  CHAIN_ID_DEC: 31337,
+  RPC_URL: 'http://127.0.0.1:8545',
+  NETWORK_NAME: 'Hardhat Local',
+
+  // 网络定义
+  NETWORKS: {
+    31337: {
+      name: 'Hardhat Local',
+      hexId: '0x7a69',
+      rpcUrl: 'http://127.0.0.1:8545',
+      explorerUrl: 'https://etherscan.io',
+    },
+    11155111: {
+      name: 'Sepolia Testnet',
+      hexId: '0xaa36a7',
+      rpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
+      explorerUrl: 'https://sepolia.etherscan.io',
+    },
+  },
+
   SEPOLIA_CHAIN_ID_DEC: 11155111,
+  SEPOLIA_CHAIN_ID: '0xaa36a7',
   SEPOLIA_RPC: 'https://ethereum-sepolia-rpc.publicnode.com',
   SEPOLIA_RPC_BACKUPS: [
     'https://sepolia.gateway.tenderly.co',
@@ -39,33 +62,124 @@ const CONFIG = {
   ],
 
   RISK_LEVELS: ['None', 'Low', 'Medium', 'High', 'Critical'],
+
+  // 已知社区用户地址（用于奖励公告栏）
+  KNOWN_COMMUNITY: [
+    '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC', // 地址3 社区用户A
+    '0x90F79bf6EB2c4f870365E785982E1f101E93b906', // 地址4 社区用户B
+    '0xa0Ee7A142d267C1f36714E4a8F75612F20a79720', // 地址10 社区用户C
+  ],
 };
 
-let _configLoaded = false;
+// --- 网络检测与地址加载 ---
 
-async function loadContractAddresses() {
-  if (_configLoaded) return;
+let _configLoaded = false;
+let _currentChainId = null;
+
+/**
+ * 获取 MetaMask 当前的 chainId（十进制）
+ */
+async function getCurrentChainId() {
+  if (_currentChainId) return _currentChainId;
+  if (!window.ethereum) return CONFIG.CHAIN_ID_DEC;
   try {
-    const res = await fetch(CONFIG.API_BASE + '/contract-addresses');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.audit_dao_address) CONFIG.AUDIT_DAO_ADDRESS = data.audit_dao_address;
-      if (data.ceat_token_address) CONFIG.CEAT_TOKEN_ADDRESS = data.ceat_token_address;
-      _configLoaded = true;
-    }
+    var chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+    _currentChainId = parseInt(chainIdHex, 16);
+    return _currentChainId;
   } catch (e) {
-    console.warn('Unable to load contract addresses from backend, using defaults:', e.message);
+    return CONFIG.CHAIN_ID_DEC;
   }
 }
 
+/**
+ * 更新 CONFIG 为指定网络
+ */
+function applyNetworkConfig(chainIdDec) {
+  var net = CONFIG.NETWORKS[chainIdDec];
+  if (!net) {
+    console.warn('不支持的链ID:', chainIdDec, '使用默认本地配置');
+    chainIdDec = 31337;
+    net = CONFIG.NETWORKS[31337];
+  }
+  CONFIG.CHAIN_ID_DEC = chainIdDec;
+  CONFIG.CHAIN_ID = net.hexId;
+  CONFIG.RPC_URL = net.rpcUrl;
+  CONFIG.NETWORK_NAME = net.name;
+  _currentChainId = chainIdDec;
+  console.log('网络已设置为:', net.name, '(chainId:', chainIdDec, ')');
+  return net;
+}
+
+/**
+ * 从后端加载合约地址（自动检测当前网络）
+ */
+async function loadContractAddresses(chainIdDec) {
+  if (_configLoaded) return true;
+
+  if (!chainIdDec) {
+    chainIdDec = await getCurrentChainId();
+  }
+
+  // 应用网络配置
+  applyNetworkConfig(chainIdDec);
+
+  try {
+    var url = CONFIG.API_BASE + '/contract-addresses?chain_id=' + chainIdDec;
+    var res = await fetch(url);
+    if (res.ok) {
+      var data = await res.json();
+      if (data.audit_dao_address) CONFIG.AUDIT_DAO_ADDRESS = data.audit_dao_address;
+      if (data.ceat_token_address) CONFIG.CEAT_TOKEN_ADDRESS = data.ceat_token_address;
+      if (data.team_manager_address) CONFIG.TEAM_MANAGER_ADDRESS = data.team_manager_address;
+      _configLoaded = true;
+      console.log('合约地址已从后端加载 (chainId=' + chainIdDec + '):', {
+        DAO: CONFIG.AUDIT_DAO_ADDRESS,
+        CEAT: CONFIG.CEAT_TOKEN_ADDRESS,
+        TM: CONFIG.TEAM_MANAGER_ADDRESS
+      });
+      return true;
+    }
+    console.warn('后端返回非 200:', res.status);
+  } catch (e) {
+    console.warn('无法从后端加载合约地址，使用默认值:', e.message);
+  }
+  return false;
+}
+
+function isConfigLoaded() {
+  return _configLoaded;
+}
+
+/**
+ * 重置配置缓存（网络切换后调用）
+ */
+function resetConfigCache() {
+  _configLoaded = false;
+  _currentChainId = null;
+}
+
+// --- 链切换工具 ---
+
 function getChainConfig(chainId) {
-  if (chainId === 11155111 || chainId === '0xaa36a7') {
+  if (chainId === 31337 || chainId === '0x7a69') {
+    var net = CONFIG.NETWORKS[31337];
     return {
-      chainId: '0xaa36a7',
+      chainId: net.hexId,
+      chainIdDec: 31337,
+      chainName: net.name,
+      rpcUrl: net.rpcUrl,
+      explorerUrl: net.explorerUrl,
+      nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }
+    };
+  }
+  if (chainId === 11155111 || chainId === '0xaa36a7') {
+    var net2 = CONFIG.NETWORKS[11155111];
+    return {
+      chainId: net2.hexId,
       chainIdDec: 11155111,
-      chainName: 'Sepolia Testnet',
-      rpcUrl: CONFIG.SEPOLIA_RPC,
-      explorerUrl: CONFIG.SEPOLIA_EXPLORER,
+      chainName: net2.name,
+      rpcUrl: net2.rpcUrl,
+      explorerUrl: net2.explorerUrl,
       nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }
     };
   }
@@ -83,9 +197,10 @@ function getChainConfig(chainId) {
 }
 
 async function switchToChain(chainIdDec) {
-  const config = getChainConfig(chainIdDec);
-  if (!config) throw new Error('Unsupported chain ID: ' + chainIdDec);
-  if (!window.ethereum) throw new Error('MetaMask not installed');
+  var config = getChainConfig(chainIdDec);
+  if (!config) throw new Error('不支持的链ID: ' + chainIdDec);
+  if (!window.ethereum) throw new Error('请安装 MetaMask');
+
   try {
     await window.ethereum.request({
       method: 'wallet_switchEthereumChain',
@@ -107,11 +222,16 @@ async function switchToChain(chainIdDec) {
       throw e;
     }
   }
+  // 切换后更新配置
+  applyNetworkConfig(chainIdDec);
+  resetConfigCache();
 }
+
+// --- 风险选择 UI ---
 
 function selectRisk(risk) {
   window.__selectedRisk = risk;
-  const options = document.querySelectorAll('.risk-option');
+  var options = document.querySelectorAll('.risk-option');
   options.forEach(function(opt) { opt.classList.remove('selected'); });
   var selected = document.querySelector('.risk-option.' + risk);
   if (selected) { selected.classList.add('selected'); }

@@ -8,6 +8,10 @@ import zipfile
 import tarfile
 from datetime import datetime, timezone
 from typing import List, Optional
+from dotenv import load_dotenv
+
+# 显式加载 .env 文件（从项目根目录）
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'), override=True)
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Depends
 from openai import OpenAI
@@ -284,6 +288,7 @@ async def submit_audit(
         full_code_hash = "0x" + computed_hash.lower()
     
     result.setdefault("task_info", {})["code_hash"] = full_code_hash
+    result["task_info"]["contract_address"] = contract_address
 
     audit_id = result.get("task_info", {}).get("audit_id", f"AUD-{datetime.now(timezone.utc).strftime('%Y%m%d')}-001")
     report = {

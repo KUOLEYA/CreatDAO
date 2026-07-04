@@ -71,13 +71,14 @@ contract AuditDAOv2 is Ownable {
         RiskLevel riskLevel;
         uint256 createdAt;
         uint256 votingEndTime;
-        mapping(address => bytes32) votedProposal;
         address[] voterList;
         mapping(address => uint256) voterWeight;
         CommunityReview[] communityReviews;
         mapping(address => bool) hasSubmittedReview;
         bytes32[] communityProposalHashes;
         mapping(bytes32 => CommunityProposal) communityProposals;
+        mapping(address => mapping(bytes32 => uint256)) votedAmountPerHash; // 拆分投票：用户→hash→票数
+        mapping(address => uint256) totalVotedWeight; // 用户已投票总数
         uint256 discussionEndTime;
         uint256 disputeCreatedAt;
         bool communityAcceptsTeam;
@@ -134,6 +135,7 @@ contract AuditDAOv2 is Ownable {
     uint256 public constant RATE_BASIS_POINTS = 10000;
     uint256 public defaultVotingDuration = 7 days;
     uint256 public committeeRewardRate = 1000;         // 委员会奖励率
+    uint256 public committeePenaltyRate = 500;        // 委员会错误投票惩罚率
 
     // --- 治理Timelock ---
     // 关键参数变更需通过此地址（可以是多签或DAO合约）
@@ -141,7 +143,7 @@ contract AuditDAOv2 is Ownable {
 
     uint256[] public unassignedProposalIds;
     mapping(uint256 => bool) public isProposalUnassigned;
-    mapping(uint256 => bool) public isProposalClaimed;
+    mapping(uint256 => mapping(address => bool)) public isProposalClaimedBy;
     mapping(uint256 => bool) public voteRewardsApplied;
 
     // ==================== 事件 ====================
@@ -298,6 +300,11 @@ contract AuditDAOv2 is Ownable {
         committeeRewardRate = _rewardRate;
     }
 
+    function setCommitteePenaltyRate(uint256 _penaltyRate) external onlyGovernance {
+        require(_penaltyRate <= 3000, "Rate too high");
+        committeePenaltyRate = _penaltyRate;
+    }
+
     function setProposalCreationFee(uint256 _fee) external onlyGovernance {
         require(_fee > 0, "Fee must be positive");
         emit ProposalCreationFeeUpdated(proposalCreationFee, _fee);
@@ -359,9 +366,10 @@ contract AuditDAOv2 is Ownable {
                 emit VoteParticipated(proposalId, voter, participationReward);
             }
 
-            // 2. 正确投票额外奖励
-            if (proposal.votedProposal[voter] == finalHash) {
-                uint256 correctReward = (weight * correctVoteRewardRate) / RATE_BASIS_POINTS;
+            // 2. 正确投票额外奖励（按实际投给获胜hash的票数计算）
+            uint256 votedForWinning = proposal.votedAmountPerHash[voter][finalHash];
+            if (votedForWinning > 0) {
+                uint256 correctReward = (votedForWinning * correctVoteRewardRate) / RATE_BASIS_POINTS;
                 if (correctReward > 0) {
                     stakers[voter].rewards += correctReward;
                     correctCount++;
@@ -428,13 +436,15 @@ contract AuditDAOv2 is Ownable {
         uint256 count = 0;
         for (uint256 i = 0; i < unassignedProposalIds.length; i++) {
             uint256 id = unassignedProposalIds[i];
-            if (isProposalUnassigned[id] && proposals[id].status == ProposalStatus.Submitted) count++;
+            if (isProposalUnassigned[id] && 
+                (proposals[id].status == ProposalStatus.Submitted || proposals[id].status == ProposalStatus.TeamReview)) count++;
         }
         uint256[] memory unassignedIds = new uint256[](count);
         uint256 index = 0;
         for (uint256 i = 0; i < unassignedProposalIds.length; i++) {
             uint256 id = unassignedProposalIds[i];
-            if (isProposalUnassigned[id] && proposals[id].status == ProposalStatus.Submitted) {
+            if (isProposalUnassigned[id] && 
+                (proposals[id].status == ProposalStatus.Submitted || proposals[id].status == ProposalStatus.TeamReview)) {
                 unassignedIds[index] = id;
                 index++;
             }
@@ -445,22 +455,28 @@ contract AuditDAOv2 is Ownable {
     // ==================== 审计团队接取提案 ====================
 
     function claimProposal(uint256 proposalId, uint256 teamId) external {
-        require(!isProposalClaimed[proposalId], "Already claimed");
-        require(isProposalUnassigned[proposalId], "Already assigned");
-        require(proposals[proposalId].status == ProposalStatus.Submitted, "Invalid status");
+        require(!isProposalClaimedBy[proposalId][msg.sender], "Already claimed by you");
+        require(
+            proposals[proposalId].status == ProposalStatus.Submitted ||
+            proposals[proposalId].status == ProposalStatus.TeamReview,
+            "Invalid status"
+        );
         
-        isProposalClaimed[proposalId] = true;
-        isProposalUnassigned[proposalId] = false;
+        isProposalClaimedBy[proposalId][msg.sender] = true;
         
-        for (uint256 i = 0; i < unassignedProposalIds.length; i++) {
-            if (unassignedProposalIds[i] == proposalId) {
-                unassignedProposalIds[i] = unassignedProposalIds[unassignedProposalIds.length - 1];
-                unassignedProposalIds.pop();
-                break;
+        // 首次领取时才执行以下操作（后续用户领取时跳过）
+        if (isProposalUnassigned[proposalId]) {
+            isProposalUnassigned[proposalId] = false;
+            for (uint256 i = 0; i < unassignedProposalIds.length; i++) {
+                if (unassignedProposalIds[i] == proposalId) {
+                    unassignedProposalIds[i] = unassignedProposalIds[unassignedProposalIds.length - 1];
+                    unassignedProposalIds.pop();
+                    break;
+                }
             }
+            teamManager.assignAuditTeam(proposalId, teamId);
         }
         
-        teamManager.assignAuditTeam(proposalId, teamId);
         emit ProposalClaimed(proposalId, teamId);
     }
 
@@ -543,14 +559,19 @@ contract AuditDAOv2 is Ownable {
         AuditProposal storage proposal = proposals[proposalId];
         require(proposal.status == ProposalStatus.CommunityReview, "Not in voting phase");
         require(block.timestamp < proposal.votingEndTime, "Voting ended");
-        require(proposal.votedProposal[msg.sender] == bytes32(0), "Already voted");
         require(proposal.communityProposals[proposalHash].proposer != address(0), "Invalid proposal");
 
         uint256 actualVoteAmount = (voteAmount == 0 || voteAmount > voterBalance) ? voterBalance : voteAmount;
+        // 拆分投票：总投票数不能超过质押余额
+        require(proposal.totalVotedWeight[msg.sender] + actualVoteAmount <= voterBalance, "Exceeds your stake balance");
 
-        proposal.votedProposal[msg.sender] = proposalHash;
-        proposal.voterWeight[msg.sender] = actualVoteAmount;
-        proposal.voterList.push(msg.sender);
+        // 首次投票时加入投票者列表
+        if (proposal.totalVotedWeight[msg.sender] == 0) {
+            proposal.voterList.push(msg.sender);
+        }
+        proposal.votedAmountPerHash[msg.sender][proposalHash] += actualVoteAmount;
+        proposal.totalVotedWeight[msg.sender] += actualVoteAmount;
+        proposal.voterWeight[msg.sender] = proposal.totalVotedWeight[msg.sender];
         proposal.communityProposals[proposalHash].votes += actualVoteAmount;
         emit VoteCast(proposalId, msg.sender, proposalHash);
     }
@@ -628,9 +649,10 @@ contract AuditDAOv2 is Ownable {
                 emit VoteParticipated(proposalId, voter, participationReward);
             }
 
-            // 2. 正确投票额外奖励
-            if (proposal.votedProposal[voter] == finalHash) {
-                uint256 correctReward = (weight * correctVoteRewardRate) / RATE_BASIS_POINTS;
+            // 2. 正确投票额外奖励（按实际投给获胜hash的票数计算）
+            uint256 votedForWinning = proposal.votedAmountPerHash[voter][finalHash];
+            if (votedForWinning > 0) {
+                uint256 correctReward = (votedForWinning * correctVoteRewardRate) / RATE_BASIS_POINTS;
                 if (correctReward > 0) {
                     stakers[voter].rewards += correctReward;
                     emit VoteRewarded(proposalId, voter, correctReward);
@@ -762,7 +784,7 @@ contract AuditDAOv2 is Ownable {
         }
     }
 
-    /// @dev 委员会奖惩（正确投票有奖励，不再惩罚错误投票者以避免跟风）
+    /// @dev 委员会奖惩（正确投票有奖励，错误投票有惩罚）
     function _applyCommitteeRewards(uint256 proposalId, bool auditorWon) internal {
         AuditProposal storage proposal = proposals[proposalId];
         for (uint256 i = 0; i < committeeMembers.length; i++) {
@@ -778,8 +800,17 @@ contract AuditDAOv2 is Ownable {
                     stakers[member].rewards += reward;
                     emit VoteRewarded(proposalId, member, reward);
                 }
+            } else {
+                // 错误投票：扣除质押金 + 降低信誉分
+                uint256 penalty = (minStakeAmount * committeePenaltyRate) / RATE_BASIS_POINTS;
+                if (penalty > 0 && stakers[member].balance >= penalty) {
+                    stakers[member].balance -= penalty;
+                    if (stakers[member].reputationScore >= 5) {
+                        stakers[member].reputationScore -= 5;
+                    }
+                    emit ReputationAdjusted(member, stakers[member].reputationScore + 5, stakers[member].reputationScore);
+                }
             }
-            // 不再惩罚错误投票的委员会成员
         }
     }
 
@@ -891,7 +922,7 @@ contract AuditDAOv2 is Ownable {
     }
 
     /// @dev 兼容旧接口（废弃否决权后始终返回false）
-    function isProposalVetoable(uint256 proposalId) external pure returns (bool) {
+    function isProposalVetoable(uint256 /* proposalId */) external pure returns (bool) {
         // 否决权已移除，不再有可被否决的提案
         return false;
     }
