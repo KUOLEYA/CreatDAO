@@ -10,7 +10,7 @@
   <script src="lib/axios.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=11"></script>
+  <script src="contract.js?v=13"></script>
   <script src="wallet.js?v=3"></script>
 
 </head>
@@ -862,7 +862,7 @@
     try {
       document.getElementById("contractParamsResult").className = 'msg pending';
       document.getElementById("contractParamsResult").innerHTML = '正在设置...';
-      const tx = await _A().setVoteRewardPenaltyRates(rewardRate, penaltyRate);
+      const tx = await _A().setVoteRewardRates(rewardRate, penaltyRate, 0);
       await tx.wait();
       showParamsResult('投票奖惩率已设：奖励 ' + rewardRate + ' / 惩罚 ' + penaltyRate);
     } catch (e) { showContractError("contractParamsResult", e); }

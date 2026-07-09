@@ -10,7 +10,7 @@
   <script src="lib/axios.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=11"></script>
+  <script src="contract.js?v=13"></script>
   <script src="wallet.js?v=3"></script>
   <style>
 .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
@@ -340,7 +340,7 @@
       <div class="card-body">
         <button class="btn btn-outline btn-sm" onclick="loadCommitteeMembers()" style="align-self:flex-start; margin-bottom:10px;">刷新成员列表</button>
         <div style="display:flex; gap:8px; margin-bottom:10px;">
-          <input id="committeeStakeAmount" class="inp inp-sm inp-num" type="text" placeholder="质押数量" value="500" style="width:120px;">
+          <input id="committeeStakeAmount" class="inp inp-sm inp-num" type="text" placeholder="最低质押 10000 CEAT" value="10000" style="width:160px;">
           <button class="btn btn-success btn-sm" onclick="stakeAsCommittee()">🏛️ 质押委员会席位</button>
           <button class="btn btn-outline btn-sm" onclick="unstakeAsCommittee()">解除委员会质押</button>
         </div>
@@ -674,7 +674,7 @@
           _pendingTasksInterval = setInterval(function() {
             checkPendingTasks();
             if (typeof loadRewardBoard === 'function') loadRewardBoard();
-          }, 30000);
+          }, 5000);
         }
       }
     },

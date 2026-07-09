@@ -10,7 +10,7 @@
   <script src="lib/axios.min.js?v=2"></script>
   <script src="common.js?v=3"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=11"></script>
+  <script src="contract.js?v=13"></script>
   <script src="wallet.js?v=3"></script>
   <style>
 .status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 16px; font-size: 11px; font-weight: 600; }
@@ -228,7 +228,7 @@
     try {
       document.getElementById("reportResult").className = 'msg pending';
       document.getElementById("reportResult").innerHTML = '正在提交...';
-      const tx = await Wallet.getContracts().auditDAO.submitTeamReport(pid, hash, ethers.constants.HashZero);
+      const tx = await Wallet.getContracts().auditDAO.submitTeamReport(pid, hash, ethers.constants.HashZero); // 简化界面无矩阵生成，使用HashZero
       await tx.wait();
       document.getElementById("reportResult").className = 'msg success';
       document.getElementById("reportResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 报告已提交 (提案' + pid + ')';

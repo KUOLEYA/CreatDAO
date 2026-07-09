@@ -11,7 +11,7 @@
   <script src="lib/sha256.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=11"></script>
+  <script src="contract.js?v=13"></script>
   <script src="wallet.js?v=3"></script>
   <style>
     .risk-selector { display: flex; gap: 10px; }
@@ -510,23 +510,7 @@
     buttons[1].className = accept ? 'btn btn-outline btn-sm' : 'btn btn-danger btn-sm';
   }
 
-  function showPending(id, text) {
-    const el = $(id);
-    el.className = 'msg pending';
-    el.innerHTML = '<span class="spinner"></span> ' + text;
-  }
-
-  function showSuccess(id, text) {
-    const el = $(id);
-    el.className = 'msg success';
-    el.innerHTML = '<span style="flex-shrink:0;">✓</span> ' + text;
-  }
-
-  function showError(id, text) {
-    const el = $(id);
-    el.className = 'msg error';
-    el.innerHTML = '<span style="flex-shrink:0;">✗</span> ' + text;
-  }
+  // showPending/showSuccess/showError 使用 common.js 中定义的全局函数
 
   function fillSample() {
     selectRisk('low');
@@ -822,12 +806,14 @@
       try {
         const reportContent = {
           riskLevel: reportData.riskLevel,
-          riskReason: reportData.riskReason,
-          coreFindings: reportData.coreFindings,
-          finalAdvice: reportData.finalAdvice,
-          findings: reportData.findings,
+          riskExplanation: reportData.riskExplanation,
+          keyFindings: reportData.keyFindings,
+          finalRecommendations: reportData.finalRecommendations,
+          findings: reportData.findingsMatrix,
           disagreements: reportData.disagreements,
-          evidence: reportData.evidence,
+          pocCode: reportData.pocCode,
+          traceAnalysis: reportData.traceAnalysis,
+          attackComparison: reportData.attackComparison,
         };
         await axios.post(BACKEND_API + '/reports/save', {
           report_hash: reportHash,
@@ -859,7 +845,7 @@
     // autoConnect 已经调过，这里等一小段确保已连接
     await new Promise(r => setTimeout(r, 1500));
     try {
-      if (!Wallet.isConnected || !Wallet.isConnected()) return;
+      if (!Wallet.isConnected()) return;
       const dao = Wallet.getContracts().auditDAO;
       // 检查最近 5 个提案
       for (let i = 0; i < 5; i++) {
@@ -882,7 +868,7 @@
       if (s.status !== 5) return showError('reviseResult', '提案不在修订阶段（当前状态: ' + s.status + '）');
       // 填充基本字段
       document.getElementById('proposalId').value = pid;
-      document.getElementById('contractAddress').value = s.contractAddress || '';
+      document.getElementById('contractAddress').value = s.codeHash ? '' : ''; // contractAddress 不在 getProposalSummary 返回值中
       document.getElementById('codeHash').value = s.codeHash || '';
       // 尝试从后端加载完整报告内容
       showPending('reviseResult', '正在加载原报告...');
@@ -892,15 +878,15 @@
          const content = JSON.parse(res.data.content || '{}');
         // 填充核心结论
         if (content.riskLevel) { selectRisk(content.riskLevel); }
-        if (content.riskReason) document.getElementById('riskReason').value = content.riskReason;
-        if (content.coreFindings) document.getElementById('coreFindings').value = content.coreFindings;
-        if (content.finalAdvice) document.getElementById('finalAdvice').value = content.finalAdvice;
+        if (content.riskExplanation) document.getElementById('riskExplanation').value = content.riskExplanation;
+        if (content.keyFindings) document.getElementById('keyFindings').value = content.keyFindings;
+        if (content.finalRecommendations) document.getElementById('finalRecommendations').value = content.finalRecommendations;
         // 填充发现矩阵
         if (content.findings) {
           const tbody = document.getElementById('findingsTable') || document.querySelector('.findings-tbody');
           if (tbody) tbody.innerHTML = '';
           content.findings.forEach((f, i) => {
-            if (i > 0) addFindingItem();
+            if (i > 0) addFindingRow();
             // 简化的填充逻辑，至少触发UI更新
           });
         }

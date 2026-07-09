@@ -6,6 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CreatDAO - 审计 DAO 操作平台</title>
   <link rel="stylesheet" href="common.css?v=2">
+  <script src="lib/ethers.min.js?v=2"></script>
+  <script src="common.js?v=2"></script>
+  <script src="config.js?v=4"></script>
+  <script src="contract.js?v=13"></script>
+  <script src="wallet.js?v=3"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -220,6 +225,21 @@
           <span>审计 DAO 操作平台</span>
         </div>
       </div>
+      <div class="header-right">
+        <span class="network-pill local" id="networkPill" onclick="toggleNetworkDropdown(event)" title="点击切换网络">
+          <span class="dot"></span>
+          <span id="networkPillLabel">Hardhat Local</span>
+          <div class="network-dropdown" id="networkDropdown">
+            <div class="network-dropdown-item" onclick="switchNetworkTo(31337); event.stopPropagation();">
+              <span class="net-dot local-dot"></span> Hardhat Local (31337)
+            </div>
+            <div class="network-dropdown-item" onclick="switchNetworkTo(11155111); event.stopPropagation();">
+              <span class="net-dot sepolia-dot"></span> Sepolia Testnet (11155111)
+            </div>
+          </div>
+        </span>
+        <button class="btn btn-outline btn-sm" id="walletBtn" onclick="Wallet.handleWalletClick()" style="color:#81c784;">🔌 连接钱包</button>
+      </div>
     </header>
 
     <div class="panel-header">
@@ -341,9 +361,16 @@
     </div>
 
     <div class="footer">
-      <p>CreatDAO © 2024 | 审计 DAO 操作平台</p>
+      <p>CreatDAO © 2026 | 审计 DAO 操作平台</p>
     </div>
 
   </div>
+<script>
+  // 页面加载时自动连接钱包并更新网络状态
+  (async function() {
+    try { await Wallet.autoConnect(); } catch(_) {}
+    if (typeof updateNetworkPill === 'function') updateNetworkPill();
+  })();
+</script>
 </body>
 </html>

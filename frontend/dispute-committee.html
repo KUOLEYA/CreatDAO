@@ -10,7 +10,7 @@
   <script src="lib/axios.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=11"></script>
+  <script src="contract.js?v=13"></script>
   <script src="wallet.js?v=3"></script>
   <style>
     .wallet-area { display: flex; align-items: center; gap: 10px; }
@@ -330,25 +330,35 @@
     }
   }
 
+  // 辅助：获取否决多签合约实例（否决功能已弃用，保留兼容）
+  function _multisigContract() {
+    return new ethers.Contract(CONFIG.MULTISIG_ADDRESS, [
+      'function confirmVeto(uint256 vetoProposalId) external',
+      'function getVetoProposal(uint256 vetoProposalId) external view returns (tuple(uint256 id, uint256 auditProposalId, address proposer, string evidence, uint256 confirmationCount, bool executed, bool failed, uint256 createdAt))',
+      'function getConfirmations(uint256 vetoProposalId) external view returns (address[] memory)'
+    ], Wallet.getSigner());
+  }
+
   async function confirmVeto() {
     if (!Wallet.isConnected()) return alert("请先连接钱包");
     const vetoId = document.getElementById("vetoProposalId").value;
     try {
       document.getElementById("vetoConfirmResult").className = 'msg pending';
       document.getElementById("vetoConfirmResult").innerHTML = '正在确认...';
-      const tx = await (new ethers.Contract(CONFIG.MULTISIG_ADDRESS, ['function confirmVeto(uint256 vetoProposalId) external'], Wallet.getSigner())).confirmVeto(vetoId);
+      const tx = await _multisigContract().confirmVeto(vetoId);
       await tx.wait();
       document.getElementById("vetoConfirmResult").className = 'msg success';
       document.getElementById("vetoConfirmResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 已确认否决提案 ' + vetoId;
-    } catch (e) { handleError(e, "vetoConfirmResult"); }
+    } catch (e) { showContractError("vetoConfirmResult", e); }
   }
 
   async function viewVetoProposal() {
     if (!Wallet.isConnected()) return alert("请先连接钱包");
     const vetoId = document.getElementById("viewVetoId").value;
     try {
-      const v = await (new ethers.Contract(CONFIG.MULTISIG_ADDRESS, ['function getVetoProposal(uint256 vetoProposalId) external view returns (tuple(uint256 id, uint256 auditProposalId, address proposer, string evidence, uint256 confirmationCount, bool executed, bool failed, uint256 createdAt))', 'function getConfirmations(uint256 vetoProposalId) external view returns (address[] memory)'], Wallet.getSigner())).getVetoProposal(vetoId);
-      const confirmations = await (new ethers.Contract(CONFIG.MULTISIG_ADDRESS, ['function getVetoProposal(uint256 vetoProposalId) external view returns (tuple(uint256 id, uint256 auditProposalId, address proposer, string evidence, uint256 confirmationCount, bool executed, bool failed, uint256 createdAt))', 'function getConfirmations(uint256 vetoProposalId) external view returns (address[] memory)'], Wallet.getSigner())).getConfirmations(vetoId);
+      const msig = _multisigContract();
+      const v = await msig.getVetoProposal(vetoId);
+      const confirmations = await msig.getConfirmations(vetoId);
       const details = {
         id: v.id.toString(),
         auditProposalId: v.auditProposalId.toString(),

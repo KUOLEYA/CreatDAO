@@ -231,6 +231,7 @@ async function switchToChain(chainIdDec) {
 
 function selectRisk(risk) {
   window.__selectedRisk = risk;
+  window.selectedRisk = risk;
   var options = document.querySelectorAll('.risk-option');
   options.forEach(function(opt) { opt.classList.remove('selected'); });
   var selected = document.querySelector('.risk-option.' + risk);

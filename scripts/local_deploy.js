@@ -45,14 +45,27 @@ async function main() {
 
   // 6.5 注册审计团队到 AuditTeamManager
   await mgr.registerAuditTeam("CreatDAO Core Audit Team", auditTeam.address, [signers[1].address, signers[2].address]);
-  console.log(" Audtit Team 注册完成: teamId=0, contract=", auditTeam.address);
+  console.log(" Audit Team 注册完成: teamId=0, contract=", auditTeam.address);
 
-  // 7. 分发 CEAT（账户 2-10 各 10000，奖励池 100000）
+  // 7. 分发 CEAT（账户 2-10 各 100000，奖励池 100000）
   const allUsers = [signers[1], signers[2], signers[3], ...signers.slice(4, 10)];
   for (const u of allUsers) {
     await ceat.transfer(u.address, ethers.parseEther("100000"));
   }
   await ceat.transfer(daoAddr, ethers.parseEther("100000"));
+
+  // 7.5 自动质押
+  // 审计团队 approve + stake 2000 CEAT
+  await ceat.connect(auditTeam).approve(daoAddr, ethers.parseEther("2000"));
+  await dao.connect(auditTeam).stake(ethers.parseEther("2000"));
+  console.log(" Audit Team 质押: 2000 CEAT");
+  // 委员会 5 人各 approve + stakeAsCommittee 10000 CEAT
+  for (let i = 0; i < 5; i++) {
+    const cm = signers[4 + i];
+    await ceat.connect(cm).approve(daoAddr, ethers.parseEther("10000"));
+    await dao.connect(cm).stakeAsCommittee(ethers.parseEther("10000"));
+  }
+  console.log(" Committee(5) 各质押: 10000 CEAT");
 
   // 8. 设置提案创建费
   await dao.setProposalCreationFee(ethers.parseEther("100"));

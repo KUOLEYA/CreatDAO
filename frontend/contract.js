@@ -26,7 +26,7 @@ const ContractDefs = {
     "function setCommitteeRewardRate(uint256 _rewardRate) external",
     "function setCommitteePenaltyRate(uint256 _penaltyRate) external",
     "function setMinStakeAmount(uint256 _amount) external",
-    "function setVoteRewardRates(uint256 _participationRewardRate, uint256 _correctVoteRewardRate) external",
+    "function setVoteRewardRates(uint256 _participationRewardRate, uint256 _correctVoteRewardRate, uint256 _maliciousPenaltyRate) external",
     "function setMinArbitrationDeposit(uint256 _deposit) external",
     "function setDisputeRetentionPeriod(uint256 _period) external",
     "function setDefaultVotingDuration(uint256 _duration) external",
