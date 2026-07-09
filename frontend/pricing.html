@@ -10,7 +10,7 @@
   <script src="lib/ethers.min.js?v=2"></script>
   <script src="lib/axios.min.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=10"></script>
+  <script src="contract.js?v=11"></script>
   <script src="wallet.js?v=3"></script>
   <style>
     .pricing-grid {
@@ -137,7 +137,7 @@
         <div class="logo">C</div>
         <div class="title">
           <h1>CreatDAO 审计服务定价</h1>
-          <span>基础费 + 赏金池抽成 + 争议费 · 透明定价</span>
+          <span>基础费 + 赏金池抽成 + 分歧费 · 透明定价</span>
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
@@ -161,7 +161,7 @@
 
     <div class="panel-header">
       <h1>💰 审计服务收费结构</h1>
-      <p>采用 <strong>"基础费 + 赏金池抽成 + 争议费"</strong> 收费模型。以等值法币计价，使用 CEAT 平台代币支付可享折扣。</p>
+      <p>采用 <strong>"基础费 + 赏金池抽成 + 分歧费"</strong> 收费模型。以等值法币计价，使用 CEAT 平台代币支付可享折扣。</p>
     </div>
 
     <div class="pricing-grid" id="tierCards">
@@ -212,7 +212,7 @@
 
           <div class="switch-row">
             <div>
-              <div class="switch-label">启用争议仲裁</div>
+              <div class="switch-label">启用分歧仲裁</div>
               <div class="switch-hint">含仲裁押金 + 委员会启动费</div>
             </div>
             <label class="toggle">
@@ -265,7 +265,7 @@
       </div>
 
       <div class="info-card">
-        <h3>⚖️ 赏金池 & 争议费用</h3>
+        <h3>⚖️ 赏金池 & 分歧费用</h3>
         <div style="font-size:13px;color:rgba(255,255,255,0.65);line-height:1.8;">
           <p><strong style="color:#fff;">赏金抽成：</strong>平台收取赏金池总额的 <span style="color:#667eea;">10%-20%</span></p>
           <p><strong style="color:#fff;">仲裁押金：</strong>$2,000 - $5,000（胜诉退还，败诉没收）</p>
@@ -286,7 +286,7 @@
         </div>
         <div style="margin-top:16px;padding:14px;background:rgba(76,175,80,0.08);border-radius:10px;font-size:12px;color:rgba(255,255,255,0.5);line-height:1.6;">
           <p><strong style="color:#43a047;">📐 收费公式：</strong></p>
-          <p>单次审计费用 = 基础审计费(按档位 × 复杂度系数 × 资产池系数) + (可选赏金池 × 抽成%) + (触发时的争议费)</p>
+          <p>单次审计费用 = 基础审计费(按档位 × 复杂度系数 × 资产池系数) + (可选赏金池 × 抽成%) + (触发时的分歧费)</p>
           <p style="margin-top:8px;">使用原生代币支付，享统一折扣。抵扣叠加生效。</p>
         </div>
       </div>
@@ -340,11 +340,11 @@
       const fallback = [
         { tier: 'standard', icon: '⭐', name: '标准版', description: 'AI 筛查 + 社区去中心化审核 + 最终报告',
           default_price: 12499, price_range: '$4,999 - $24,999',
-          includes: ['AI 深度筛查 + 社区审核','多维度安全分析报告','漏洞风险等级评定','修复建议与最佳实践','争议仲裁机制覆盖','5-10 工作日交付'],
+          includes: ['AI 深度筛查 + 社区审核','多维度安全分析报告','漏洞风险等级评定','修复建议与最佳实践','分歧仲裁机制覆盖','5-10 工作日交付'],
           positioning: '主推爆款。对标 Sher10k 等众包审计，价格有竞争力' },
-        { tier: 'deep', icon: '🛡️', name: '深度版', description: '标准版 + 审计团队深度介入 + 高频争议委员会支持',
+        { tier: 'deep', icon: '🛡️', name: '深度版', description: '标准版 + 审计团队深度介入 + 高频分歧委员会支持',
           default_price: 45000, price_range: '$25,000 - $80,000+',
-          includes: ['标准版全部服务','资深审计团队深度介入','人工逐行代码审查','高频争议委员会专属通道','持续安全监控','优先响应 + 加急处理'],
+          includes: ['标准版全部服务','资深审计团队深度介入','人工逐行代码审查','高频分歧委员会专属通道','持续安全监控','优先响应 + 加急处理'],
           positioning: '面向大型 DeFi、RWA、公链基础设施，价格为传统巨头 1/2~1/5' }
       ];
       currentTiers = fallback;

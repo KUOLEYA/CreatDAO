@@ -98,7 +98,10 @@ a:hover { text-decoration: underline; }
 
 /* ---- Base Header ---- */
 .header {
-  background: rgba(255, 255, 255, 0.06);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(15, 15, 25, 0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -577,3 +580,116 @@ select.inp option {
 .btn-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
 
 .app-container { max-width: 1000px; margin: 0 auto; padding: 20px; }
+
+/* ============================================
+   Shared Modal
+   ============================================ */
+
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  animation: fadeInUp 0.25s ease;
+}
+.modal-overlay.show {
+  display: flex;
+}
+
+.modal-dialog {
+  background: #13132b;
+  border: 1px solid rgba(102, 126, 234, 0.25);
+  border-radius: 16px;
+  padding: 0;
+  max-width: 700px;
+  width: 90%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(102, 126, 234, 0.08);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 22px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  line-height: 1;
+  transition: all 0.2s;
+}
+.modal-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-body .report-meta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 14px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.modal-body .report-content {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 18px;
+  white-space: pre-wrap;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.6;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.report-view-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #60a5fa;
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: none;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  transition: all 0.2s;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.report-view-link:hover {
+  background: rgba(96, 165, 250, 0.12);
+  border-color: rgba(96, 165, 250, 0.4);
+  text-decoration: none;
+}

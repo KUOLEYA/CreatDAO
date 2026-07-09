@@ -11,7 +11,7 @@
   <script src="lib/sha256.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=10"></script>
+  <script src="contract.js?v=11"></script>
   <script src="wallet.js?v=3"></script>
   <style>
     .report-preview {
@@ -464,6 +464,7 @@
   let selectedRisk = '';
   let reportData = {};
   let reportHash = '';
+  let matrixHash = '';
 
   function _A() { return Wallet.getContracts().auditDAO; }
   function _S() { return Wallet.getSigner(); }
@@ -851,6 +852,21 @@
     const reportJson = JSON.stringify(reportData, null, 2);
     reportHash = '0x' + sha256(reportJson).toLowerCase();
 
+    // 生成对齐判定矩阵并计算哈希
+    const alignmentItems = collectAlignmentItems();
+    const matrix = [];
+    for (var i = 0; i < alignmentItems.length; i++) {
+      var item = alignmentItems[i];
+      matrix.push({
+        vulnId: 'ALIGN-' + (i + 1),
+        title: item.finding,
+        severity: item.result === 'disagree' ? 'High' : (item.result === 'partial' ? 'Medium' : 'Low'),
+        isValid: item.result === 'agree',
+        fixed: false
+      });
+    }
+    matrixHash = '0x' + sha256(JSON.stringify(matrix)).toLowerCase();
+
     $('reportHash').textContent = reportHash;
     $('hashDisplay').style.display = 'block';
     $('previewBtn').disabled = false;
@@ -1057,7 +1073,7 @@
 
     try {
       showPending('submitResult', '正在提交社区方案到链上...');
-      const tx = await _A().submitCommunityProposal(proposalId, reportHash, { gasLimit: 500000 });
+      const tx = await _A().submitCommunityProposal(proposalId, reportHash, matrixHash, { gasLimit: 500000 });
       await tx.wait();
 
       await axios.post(BACKEND_API + '/community-report/save', {

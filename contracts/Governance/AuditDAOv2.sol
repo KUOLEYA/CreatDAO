@@ -12,19 +12,19 @@ interface IDepositProof {
 
 /**
  * @title AuditDAOv2
- * @dev 去中心化审计DAO核心合约 - 「社区 → 委员会 → Kleros仲裁」三段争议解决
+ * @dev 去中心化审计DAO核心合约 - 「社区 → 委员会 → Kleros仲裁」三段分歧解决
  *
  * === 治理原则 ===
  * - 审计团队否决权已移除，Kleros仲裁为终局
  * - 用户可自主创建提案（支付审计费用），管理员仅保留紧急暂停权限
  * - Owner关键参数变更需通过治理Timelock
- * - 项目方(owner)不能进入争议委员会，避免利益冲突
+ * - 项目方(owner)不能进入分歧委员会，避免利益冲突
  * - 投票奖惩：参与即奖励，正确额外奖励，无明显恶意不惩罚
  *
  * === 业务流程 ===
  * 第一阶段：用户上传代码，支付审计费用，创建提案
  * 第二阶段：审计团队 + 社区协同审核、投票
- * 第三阶段：争议解决（社区投票 → 二次复核 → 委员会裁决 → Kleros仲裁终局）
+ * 第三阶段：分歧解决（社区投票 → 二次复核 → 委员会裁决 → Kleros仲裁终局）
  */
 contract AuditDAOv2 is Ownable {
     IERC20 public ceatToken;
@@ -38,9 +38,9 @@ contract AuditDAOv2 is Ownable {
         TeamReview,        // 1 - 审计团队审核中
         CommunityReview,   // 2 - 社区审核与投票
         Discussion,        // 3 - 公开讨论
-        FirstDispute,      // 4 - 争议判断（社区投票是否认可团队结果）
+        FirstDispute,      // 4 - 分歧判断（社区投票是否认可团队结果）
         SecondReview,      // 5 - 审计团队二次复核
-        CommitteeRuling,   // 6 - 争议委员会裁决（5人，3/5通过）
+        CommitteeRuling,   // 6 - 分歧委员会裁决（5人，3/5通过）
         Arbitration,       // 7 - Kleros第三方独立仲裁（终局）
         Finalized          // 8 - 审计完成，报告链上存证
     }
@@ -53,6 +53,7 @@ contract AuditDAOv2 is Ownable {
         bytes32 hash;
         uint256 votes;
         address proposer;
+        bytes32 matrixHash; // 漏洞判定矩阵哈希（链上共识判定依据）
     }
 
     struct CommunityReview {
@@ -71,6 +72,8 @@ contract AuditDAOv2 is Ownable {
         RiskLevel riskLevel;
         uint256 createdAt;
         uint256 votingEndTime;
+        bytes32 auditMatrixHash; // 审计团队漏洞判定矩阵哈希（共识判定依据）
+        bytes32 winningCommunityMatrixHash; // 社区投票胜出方案的矩阵哈希
         address[] voterList;
         mapping(address => uint256) voterWeight;
         CommunityReview[] communityReviews;
@@ -123,6 +126,8 @@ contract AuditDAOv2 is Ownable {
     uint256 public proposalCreationFee;               // 用户创建提案费用（CEAT）
     uint256 public minArbitrationDeposit;
     uint256 public minStakeAmount = 500 * 10**18;
+    uint256 public minCommitteeStake = 10000 * 10**18; // 委员会长期席位质押门槛（10000 CEAT）
+    mapping(address => uint256) public committeeStakes; // 委员会成员全局质押量
 
     // --- 投票奖惩参数（三参数体系） ---
     // 参与即获得的奖励（无论投对投错）
@@ -228,6 +233,30 @@ contract AuditDAOv2 is Ownable {
         stakers[msg.sender].rewards = 0;
         require(ceatToken.transfer(msg.sender, rewards), "Transfer failed");
         emit RewardsClaimed(msg.sender, rewards);
+    }
+
+    // ==================== 委员会长期席位质押 ====================
+
+    /// @notice 委员会成员一次性质押获得全局仲裁资格（无需为每个案件重复质押）
+    function stakeAsCommittee(uint256 amount) external {
+        require(_isCommitteeMember(msg.sender), "Not a committee member");
+        require(amount > 0, "Amount must be positive");
+        require(ceatToken.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        committeeStakes[msg.sender] += amount;
+        stakers[msg.sender].balance += amount;
+        emit Staked(msg.sender, amount);
+    }
+
+    /// @notice 委员会成员提取质押（需确保不低于最低质押门槛）
+    function unstakeAsCommittee(uint256 amount) external {
+        require(amount > 0, "Amount must be positive");
+        require(committeeStakes[msg.sender] >= amount, "Insufficient committee stake");
+        uint256 remaining = committeeStakes[msg.sender] - amount;
+        require(remaining == 0 || remaining >= minCommitteeStake, "Below minimum committee stake");
+        committeeStakes[msg.sender] = remaining;
+        stakers[msg.sender].balance -= amount;
+        require(ceatToken.transfer(msg.sender, amount), "Transfer failed");
+        emit Unstaked(msg.sender, amount);
     }
 
     // ==================== 治理配置 ====================
@@ -452,6 +481,11 @@ contract AuditDAOv2 is Ownable {
         return unassignedIds;
     }
 
+    /// @notice 查询提案是否已被任何人接取
+    function isProposalClaimed(uint256 proposalId) external view returns (bool) {
+        return !isProposalUnassigned[proposalId];
+    }
+
     // ==================== 审计团队接取提案 ====================
 
     function claimProposal(uint256 proposalId, uint256 teamId) external {
@@ -482,12 +516,13 @@ contract AuditDAOv2 is Ownable {
 
     // ==================== 审计团队提交报告 ====================
 
-    function submitTeamReport(uint256 proposalId, bytes32 reportHash) external {
+    function submitTeamReport(uint256 proposalId, bytes32 reportHash, bytes32 matrixHash) external {
         require(msg.sender == auditTeam || msg.sender == owner(), "Not authorized");
         AuditProposal storage proposal = proposals[proposalId];
         require(proposal.status == ProposalStatus.Submitted, "Invalid status");
         require(reportHash != bytes32(0), "Hash required");
         proposal.auditReportHash = reportHash;
+        proposal.auditMatrixHash = matrixHash;
         proposal.status = ProposalStatus.TeamReview;
         emit TeamReportSubmitted(proposalId, reportHash);
         emit ProposalStatusChanged(proposalId, ProposalStatus.Submitted, ProposalStatus.TeamReview);
@@ -520,14 +555,14 @@ contract AuditDAOv2 is Ownable {
         emit ProposalStatusChanged(proposalId, ProposalStatus.TeamReview, ProposalStatus.CommunityReview);
     }
 
-    function submitCommunityProposal(uint256 proposalId, bytes32 resultHash) external {
+    function submitCommunityProposal(uint256 proposalId, bytes32 resultHash, bytes32 matrixHash) external {
         require(stakers[msg.sender].balance >= minStakeAmount, "Insufficient stake");
         AuditProposal storage proposal = proposals[proposalId];
         require(proposal.status == ProposalStatus.TeamReview || proposal.status == ProposalStatus.CommunityReview, "Invalid status");
         require(proposal.communityProposals[resultHash].proposer == address(0), "Hash exists");
         
         proposal.communityProposals[resultHash] = CommunityProposal({
-            hash: resultHash, votes: 0, proposer: msg.sender
+            hash: resultHash, votes: 0, proposer: msg.sender, matrixHash: matrixHash
         });
         proposal.communityProposalHashes.push(resultHash);
         emit CommunityProposalSubmitted(proposalId, resultHash, msg.sender);
@@ -594,6 +629,7 @@ contract AuditDAOv2 is Ownable {
             }
         }
         proposal.winningCommunityHash = winningHash;
+        proposal.winningCommunityMatrixHash = proposal.communityProposals[winningHash].matrixHash;
         proposal.status = ProposalStatus.Discussion;
         proposal.discussionEndTime = block.timestamp + 2 days;
         emit WinningHashDetermined(proposalId, winningHash);
@@ -606,7 +642,9 @@ contract AuditDAOv2 is Ownable {
         require(proposal.status == ProposalStatus.Discussion, "Invalid status");
         require(block.timestamp >= proposal.discussionEndTime, "Discussion not ended");
 
-        if (proposal.winningCommunityHash == proposal.auditReportHash) {
+        // 共识判定基于漏洞判定矩阵哈希（而非全文哈希），不同文档格式不影响共识
+        if (proposal.winningCommunityMatrixHash != bytes32(0) && 
+            proposal.winningCommunityMatrixHash == proposal.auditMatrixHash) {
             _finalizeProposal(proposalId, proposal.auditReportHash);
             _distributeCommunityRewards(proposalId);
             emit DiscussionConsensus(proposalId, proposal.auditReportHash);
@@ -690,7 +728,7 @@ contract AuditDAOv2 is Ownable {
         emit ContributorsRewarded(proposalId, reviewers, points);
     }
 
-    // ==================== 争议解决第1步：社区投票是否认可团队结果 ====================
+    // ==================== 分歧解决第1步：社区投票是否认可团队结果 ====================
 
     function voteOnAcceptance(uint256 proposalId, bool accept) external {
         require(stakers[msg.sender].balance >= minStakeAmount, "Insufficient stake");
@@ -719,7 +757,7 @@ contract AuditDAOv2 is Ownable {
         }
     }
 
-    // ==================== 争议解决第2步：审计团队二次复核 ====================
+    // ==================== 分歧解决第2步：审计团队二次复核 ====================
 
     function submitRevisedReport(uint256 proposalId, bytes32 revisedHash) external {
         require(msg.sender == auditTeam, "Not authorized");
@@ -755,10 +793,11 @@ contract AuditDAOv2 is Ownable {
         }
     }
 
-    // ==================== 争议解决第3步：委员会裁决 ====================
+    // ==================== 分歧解决第3步：委员会裁决 ====================
 
     function committeeVote(uint256 proposalId, bool supportAuditor) external {
         require(_isCommitteeMember(msg.sender), "Not authorized");
+        require(committeeStakes[msg.sender] >= minCommitteeStake, "Insufficient committee stake");
         AuditProposal storage proposal = proposals[proposalId];
         require(proposal.status == ProposalStatus.CommitteeRuling, "Invalid status");
 
@@ -814,7 +853,7 @@ contract AuditDAOv2 is Ownable {
         }
     }
 
-    // ==================== 争议解决第4步：Kleros独立仲裁（终局） ====================
+    // ==================== 分歧解决第4步：Kleros独立仲裁（终局） ====================
 
     function requestArbitration(uint256 proposalId) external payable {
         AuditProposal storage proposal = proposals[proposalId];

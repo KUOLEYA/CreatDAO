@@ -11,7 +11,7 @@
   <script src="lib/sha256.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=10"></script>
+  <script src="contract.js?v=11"></script>
   <script src="wallet.js?v=3"></script>
   <style>
     .risk-selector { display: flex; gap: 10px; }
@@ -657,7 +657,7 @@ let proposalHash = '';
 
       showPending('submitResult', '正在提交提案至链上...');
 
-      const tx = await _A().submitCommunityProposal(pid, proposalHash);
+      const tx = await _A().submitCommunityProposal(pid, proposalHash, ethers.constants.HashZero);
       await tx.wait();
 
       showSuccess('submitResult', '提案发布成功！交易哈希: ' + tx.hash.slice(0, 20) + '...');

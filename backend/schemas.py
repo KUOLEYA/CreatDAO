@@ -52,6 +52,7 @@ class CommitteeVoteRequest(BaseModel):
 class SubmitReportRequest(BaseModel):
     proposal_id: int
     report_hash: str
+    matrix_hash: Optional[str] = None
 
 class TransferOwnershipRequest(BaseModel):
     new_owner: str

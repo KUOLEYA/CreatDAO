@@ -8,6 +8,7 @@ import time
 import requests as http_requests
 from datetime import datetime, timedelta, timezone
 import os
+import json
 from dotenv import load_dotenv
 
 # 加载 .env 文件
@@ -111,7 +112,8 @@ def submit_report(req: schemas.SubmitReportRequest):
     """提交审计报告（使提案进入 TeamReview 状态）"""
     try:
         report_hash_bytes = validate_hex_hash(req.report_hash, "report hash")
-
+        matrix_hash_bytes = validate_hex_hash(req.matrix_hash, "matrix hash") if req.matrix_hash else b'\x00' * 32
+        
         try:
             on_chain_proposal = audit_dao_contract.functions.getProposalSummary(req.proposal_id).call()
             # getProposalSummary 返回: id, codeHash, auditReportHash, winningCommunityHash,
@@ -128,7 +130,7 @@ def submit_report(req: schemas.SubmitReportRequest):
             print(f"Read error: {e}")
 
         # 3. 发送交易
-        receipt = contract_utils.submit_audit_report_on_chain(req.proposal_id, report_hash_bytes)
+        receipt = contract_utils.submit_audit_report_on_chain(req.proposal_id, report_hash_bytes, matrix_hash_bytes)
         if receipt.status != 1:
             raise HTTPException(status_code=500, detail="提交审计报告失败(revert)")
         return {"status": "success", "tx_hash": receipt.transactionHash.hex()}
@@ -143,6 +145,7 @@ def submit_community_proposal(req: schemas.SubmitReportRequest):
     """提交社区方案（满足开启投票的必要条件）"""
     try:
         report_hash_bytes = validate_hex_hash(req.report_hash, "report hash")
+        matrix_hash_bytes = validate_hex_hash(req.matrix_hash, "matrix hash") if req.matrix_hash else b'\x00' * 32
         
         try:
             on_chain_proposal = audit_dao_contract.functions.getProposalSummary(req.proposal_id).call()
@@ -155,7 +158,7 @@ def submit_community_proposal(req: schemas.SubmitReportRequest):
         except Exception:
             pass
         
-        receipt = contract_utils.submit_community_proposal_on_chain(req.proposal_id, report_hash_bytes)
+        receipt = contract_utils.submit_community_proposal_on_chain(req.proposal_id, report_hash_bytes, matrix_hash_bytes)
         if receipt.status != 1:
             raise HTTPException(status_code=500, detail="提交社区方案失败(revert)")
         return {"status": "success", "tx_hash": receipt.transactionHash.hex()}
@@ -278,6 +281,48 @@ def get_report_content(
     if not entry:
         raise HTTPException(status_code=404, detail="Report not found")
     return entry
+
+
+@app.get("/api/reports/by-hash/{report_hash}", response_model=schemas.ReportContentResponse)
+def get_report_by_hash(
+    report_hash: str,
+    db: Session = Depends(get_db),
+):
+    clean_hash = report_hash.replace("0x", "")
+    if not clean_hash:
+        raise HTTPException(status_code=400, detail="Invalid report hash")
+    full_hash = "0x" + clean_hash.lower()
+
+    # 1) 先查审计团队/后台报告
+    entry = db.query(models.ReportContent).filter(
+        models.ReportContent.report_hash == full_hash
+    ).first()
+    if entry:
+        return entry
+
+    # 2) 再查社区报告（统一返回格式）
+    comm = db.query(models.CommunityReport).filter(
+        models.CommunityReport.report_hash == full_hash
+    ).first()
+    if comm:
+        from datetime import datetime
+        content_parts = {
+            "consensus_proof": comm.consensus_proof,
+            "contributors": comm.contributors,
+            "alignment_statement": comm.alignment_statement,
+            "signatures": comm.signatures,
+        }
+        return schemas.ReportContentResponse(
+            report_hash=comm.report_hash or full_hash,
+            party="community",
+            proposal_id=comm.proposal_id,
+            code_hash=None,
+            content=json.dumps(content_parts, ensure_ascii=False),
+            submitter_address=comm.submitter_address,
+            created_at=comm.created_at or datetime.utcnow(),
+        )
+
+    raise HTTPException(status_code=404, detail="Report not found")
 
 
 # --- Community Report APIs ---

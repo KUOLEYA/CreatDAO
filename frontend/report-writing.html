@@ -11,7 +11,7 @@
   <script src="lib/sha256.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=10"></script>
+  <script src="contract.js?v=11"></script>
   <script src="wallet.js?v=3"></script>
   <style>
     .risk-selector { display: flex; gap: 10px; }
@@ -357,12 +357,12 @@
     </div>
   </div>
 
-  <!-- 修订报告（争议步骤②） -->
+  <!-- 修订报告（分歧步骤②） -->
   <div class="card" id="reviseCard" style="display: none;">
     <div class="card-header">
       <div class="card-icon red">🔄</div>
       <div>
-        <div class="card-title">修订报告（争议步骤②）</div>
+        <div class="card-title">修订报告（分歧步骤②）</div>
         <div class="card-desc">提案进入二次复核阶段，审计团队可修改并重新提交报告</div>
       </div>
     </div>
@@ -401,6 +401,7 @@
   let reportData = {};
   let disagreementCount = 1;
   let reportHash = '';
+  let matrixHash = '';
   const BACKEND_API = CONFIG.API_BASE;
 
   // 从 URL 参数读取预填信息
@@ -644,7 +645,22 @@
 
     const reportJson = JSON.stringify(reportData, null, 2);
     reportHash = '0x' + sha256(reportJson).toLowerCase();
-    
+
+    // 生成漏洞判定矩阵并计算哈希
+    const findings = collectFindings();
+    const matrix = [];
+    for (var i = 0; i < findings.length; i++) {
+      var f = findings[i];
+      matrix.push({
+        vulnId: f.id,
+        title: f.description,
+        severity: f.severity,
+        isValid: f.conclusion === 'BLOCK',
+        fixed: false
+      });
+    }
+    matrixHash = '0x' + sha256(JSON.stringify(matrix)).toLowerCase();
+
     $('reportHash').textContent = reportHash;
     $('hashDisplay').style.display = 'block';
     $('previewBtn').disabled = false;
@@ -799,7 +815,7 @@
 
       showPending('submitResult', `正在提交报告到提案 #${proposalId}...`);
 
-      const tx = await Wallet.getContracts().auditDAO.submitTeamReport(proposalId, reportHash);
+      const tx = await Wallet.getContracts().auditDAO.submitTeamReport(proposalId, reportHash, matrixHash);
       await tx.wait();
 
       showPending('submitResult', `正在保存报告到后端...`);

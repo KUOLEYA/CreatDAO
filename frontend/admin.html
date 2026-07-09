@@ -10,7 +10,7 @@
   <script src="lib/axios.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=10"></script>
+  <script src="contract.js?v=11"></script>
   <script src="wallet.js?v=3"></script>
 
 </head>
@@ -39,7 +39,7 @@
         </div>
       </span>
       <button class="btn btn-outline btn-sm" id="walletBtn" onclick="Wallet.handleWalletClick()" style="color:#81c784;">🔌 连接钱包</button>
-      <button class="btn btn-outline" onclick="window.location.href='home.html'">返回主页面</button>
+      <a href="home.html" class="btn btn-outline btn-sm" style="text-decoration:none;">← 返回主页</a>
     </div>
   </header>
 
@@ -47,26 +47,7 @@
     <p>请使用管理员账户 (owner) 连接</p>
   </div>
 
-  <!-- Create Proposal -->
-  <div class="card">
-    <div class="card-header">
-      <div class="card-icon purple">&#43;</div>
-      <div>
-        <div class="card-title">创建审计提案 <span style="font-size:12px;color:#888;background:#f0f0f0;padding:2px 8px;border-radius:10px;font-weight:normal;">手动创建</span></div>
-        <div class="card-desc">创建审计提案，需提供代码 IPFS 哈希</div>
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="form-row">
-        <label>代码哈希</label>
-        <input id="codeHash" class="inp inp-hash" type="text" placeholder="0x..." size="66">
-        <button class="btn btn-primary btn-sm" onclick="submitProposal()">提交提案</button>
-      </div>
-      <div id="proposalResult" class="msg"></div>
-    </div>
-  </div>
-
-  <!-- Voting Actions -->
+  <!-- 1. 控制投票（启动/结束投票、结束讨论、分歧管理、查看分歧状态） -->
   <div class="card">
     <div class="card-header">
       <div class="card-icon orange">&#9654;</div>
@@ -100,15 +81,17 @@
         <label>提案 ID</label>
         <input id="finalizeProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
         <button class="btn btn-danger btn-sm" onclick="finalizeVoting()">提前结束投票</button>
-        <button class="btn btn-primary btn-sm" onclick="finalizeDiscussion()">结束讨论</button>
       </div>
       <div style="font-size:12px; color:rgba(255,255,255,0.4); margin-top: 6px;">
         <span style="color:#ffcc80;">⚠️</span> 结束投票后需结束讨论才会结算奖励
       </div>
       <div id="finalizeResult" class="msg"></div>
+      <div class="form-row" style="margin-top:6px;">
+        <button class="btn btn-primary btn-sm" onclick="finalizeDiscussion()">结束讨论</button>
+      </div>
       <div class="divider"></div>
-      <!-- 争议管理 -->
-      <div style="font-weight:600; font-size:13px; margin-bottom:8px;">⚖️ 争议管理（3步流程）</div>
+      <!-- 分歧管理 -->
+      <div style="font-weight:600; font-size:13px; margin-bottom:8px;">⚖️ 分歧管理（3步流程）</div>
       <div style="font-size:11px; color:rgba(255,255,255,0.45); margin-bottom:10px;">
         步骤① 社区投票认可 → 步骤② 审计团队修订 → 步骤③ 委员会裁决
       </div>
@@ -117,7 +100,7 @@
         <input id="disputeProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
       </div>
       <div class="form-row">
-        <button class="btn btn-danger btn-sm" onclick="resolveDisputeStep1()">① 裁决争议第1步</button>
+        <button class="btn btn-danger btn-sm" onclick="resolveDisputeStep1()">① 裁决分歧第1步</button>
       </div>
       <div id="disputeStep1Result" class="msg"></div>
       <div class="form-row" style="margin-top:4px;">
@@ -125,47 +108,112 @@
       </div>
       <div id="disputeStep2Result" class="msg"></div>
       <div class="form-row" style="margin-top:4px;">
-        <button class="btn btn-outline btn-sm" onclick="checkDisputeStatus()">📋 查看争议状态</button>
+        <button class="btn btn-outline btn-sm" onclick="checkDisputeStatus()">📋 查看分歧状态</button>
       </div>
       <div id="disputeStatusResult" class="msg"></div>
     </div>
   </div>
 
-  <!-- Configuration -->
+  <!-- 3. 合约状态查询 -->
   <div class="card">
     <div class="card-header">
-      <div class="card-icon cyan">&#9881;</div>
+      <div class="card-icon purple">&#128203;</div>
+      <div>
+        <div class="card-title">合约状态查询</div>
+        <div class="card-desc">查看 owner、审计团队、委员会等配置</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <button class="btn btn-outline btn-sm" onclick="loadConfig()" style="align-self:flex-start;">刷新配置</button>
+      <pre id="configInfo" class="code-block" style="margin-top:8px;">点击刷新加载配置</pre>
+    </div>
+  </div>
+
+  <!-- 4. 设置分歧委员会 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon green">&#128101;</div>
+      <div>
+        <div class="card-title">设置分歧委员会</div>
+        <div class="card-desc">输入5个委员会成员地址</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
+        <input id="committeeMember1" class="inp inp-addr" type="text" placeholder="成员地址 1">
+        <input id="committeeMember2" class="inp inp-addr" type="text" placeholder="成员地址 2">
+        <input id="committeeMember3" class="inp inp-addr" type="text" placeholder="成员地址 3">
+        <input id="committeeMember4" class="inp inp-addr" type="text" placeholder="成员地址 4">
+        <input id="committeeMember5" class="inp inp-addr" type="text" placeholder="成员地址 5">
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="setCommittee()" style="align-self:flex-start;">提交委员会</button>
+      <div id="committeeResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- 5. 设置分歧委员奖惩率 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon orange">&#9733;</div>
+      <div>
+        <div class="card-title">设置分歧委员奖惩率</div>
+        <div class="card-desc">设置委员会成员正确投票的奖励率和错误投票的惩罚率（basis points，1000 = 10%）</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>奖励率</label>
+        <input id="committeeRewardRate" class="inp inp-sm inp-num" type="number" placeholder="1000=10%" value="1000">
+        <label style="min-width:auto;">惩罚率</label>
+        <input id="committeePenaltyRate" class="inp inp-sm inp-num" type="number" placeholder="500=5%" value="500">
+        <button class="btn btn-outline btn-sm" onclick="setCommitteeRewardPenalty()">设置</button>
+      </div>
+      <div id="committeeRewardPenaltyResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- 6. 合约参数配置 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">⚙️</div>
       <div>
         <div class="card-title">合约参数配置</div>
-      <div class="card-desc">更新审计团队、所有权等参数</div>
+        <div class="card-desc">配置质押门槛、投票奖惩率、仲裁押金、分歧保留期</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>最低质押量</label>
+        <input id="minStakeAmount" class="inp inp-sm inp-num" type="number" placeholder="CEAT" value="500">
+        <button class="btn btn-outline btn-sm" onclick="setMinStakeAmount()">设置</button>
+      </div>
+      <div class="form-row">
+        <label>投票奖励率</label>
+        <input id="voteRewardRate" class="inp inp-sm inp-num" type="number" placeholder="800=8%" value="800">
+        <label style="min-width:auto;">惩罚率</label>
+        <input id="votePenaltyRate" class="inp inp-sm inp-num" type="number" placeholder="400=4%" value="400">
+        <button class="btn btn-outline btn-sm" onclick="setVoteRewardPenalty()">设置</button>
+      </div>
+      <div class="form-row">
+        <label>仲裁押金</label>
+        <input id="minArbitrationDeposit" class="inp inp-sm inp-num" type="number" placeholder="CEAT" value="1000">
+        <button class="btn btn-outline btn-sm" onclick="setMinArbitrationDeposit()">设置</button>
+      </div>
+      <div class="form-row">
+        <label>分歧保留期(天)</label>
+        <input id="disputeRetentionPeriod" class="inp inp-sm inp-num" type="number" placeholder="天" value="3">
+        <button class="btn btn-outline btn-sm" onclick="setDisputeRetentionPeriod()">设置</button>
+      </div>
+      <div class="form-row">
+        <label>委员会最低质押</label>
+        <input id="minCommitteeStakeAmount" class="inp inp-sm inp-num" type="number" placeholder="CEAT" value="500">
+        <button class="btn btn-outline btn-sm" onclick="setMinCommitteeStake()">设置</button>
+      </div>
+      <div id="contractParamsResult" class="msg"></div>
     </div>
   </div>
-  <div class="card-body">
-    <div style="background:rgba(0,0,0,0.3); border-radius:8px; padding:12px; margin-bottom:16px; font-size:12px;">
-      <div style="margin-bottom:8px;"><strong>📋 合约地址:</strong> <span id="debugContractAddr" style="font-family:monospace;"></span></div>
-      <div style="margin-bottom:8px;"><strong>🌐 网络 ID:</strong> <span id="debugNetworkId"></span></div>
-      <div style="margin-bottom:8px;"><strong>👤 连接地址:</strong> <span id="debugConnectedAddr" style="font-family:monospace;"></span></div>
-      <button class="btn btn-outline btn-sm" onclick="refreshDebugInfo()" style="margin-top:8px;">刷新调试信息</button>
-    </div>
-    
-    <div class="form-row">
-      <label>设置审计团队</label>
-      <input id="newAuditTeam" class="inp inp-addr" type="text" placeholder="0x...">
-      <button class="btn btn-primary btn-sm" onclick="setAuditTeam()">设置</button>
-    </div>
-    <div id="auditTeamResult" class="msg"></div>
-    <div class="divider"></div>
-    <div class="form-row">
-      <label>检查/转移所有权</label>
-      <input id="newOwner" class="inp inp-addr" type="text" placeholder="0x..." value="0xE3bdE49dA9E2506398Dc3600f65e082C54408048">
-      <button class="btn btn-outline btn-sm" onclick="checkOwnerStatus()">检查状态</button>
-      <button class="btn btn-danger btn-sm" onclick="transferOwnership()">转移</button>
-    </div>
-    <div id="ownershipResult" class="msg"></div>
-  </div>
-</div>
 
-  <!-- Create Audit Team -->
+  <!-- 7. 注册审计团队 -->
   <div class="card">
     <div class="card-header">
       <div class="card-icon cyan">&#128295;</div>
@@ -195,12 +243,12 @@
     </div>
   </div>
 
-  <!-- Audit Teams List -->
+  <!-- 8. 查看贡献者（审计团队列表） -->
   <div class="card">
     <div class="card-header">
       <div class="card-icon green">&#128100;</div>
       <div>
-        <div class="card-title">审计团队列表</div>
+        <div class="card-title">查看贡献者</div>
         <div class="card-desc">查看所有活跃审计团队的信息和统计</div>
       </div>
     </div>
@@ -210,91 +258,46 @@
     </div>
   </div>
 
-  <!-- Committee -->
+  <!-- 9. 系统信息 -->
   <div class="card">
     <div class="card-header">
-      <div class="card-icon green">&#128101;</div>
+      <div class="card-icon cyan">&#9881;</div>
       <div>
-        <div class="card-title">设置争议委员会</div>
-        <div class="card-desc">输入5个委员会成员地址</div>
-      </div>
-    </div>
-    <div class="card-body">
-      <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
-        <input id="committeeMember1" class="inp inp-addr" type="text" placeholder="成员地址 1">
-        <input id="committeeMember2" class="inp inp-addr" type="text" placeholder="成员地址 2">
-        <input id="committeeMember3" class="inp inp-addr" type="text" placeholder="成员地址 3">
-        <input id="committeeMember4" class="inp inp-addr" type="text" placeholder="成员地址 4">
-        <input id="committeeMember5" class="inp inp-addr" type="text" placeholder="成员地址 5">
-      </div>
-      <button class="btn btn-primary btn-sm" onclick="setCommittee()" style="align-self:flex-start;">提交委员会</button>
-      <div id="committeeResult" class="msg"></div>
+        <div class="card-title">系统信息</div>
+      <div class="card-desc">更新审计团队、所有权等参数</div>
     </div>
   </div>
-
-  <!-- Committee Reward Penalty -->
-  <div class="card">
-    <div class="card-header">
-      <div class="card-icon orange">&#9733;</div>
-      <div>
-        <div class="card-title">设置争议委员奖惩率</div>
-        <div class="card-desc">设置委员会成员正确投票的奖励率和错误投票的惩罚率（basis points，1000 = 10%）</div>
-      </div>
+  <div class="card-body">
+    <div style="background:rgba(0,0,0,0.3); border-radius:8px; padding:12px; margin-bottom:16px; font-size:12px;">
+      <div style="margin-bottom:8px;"><strong>📋 合约地址:</strong> <span id="debugContractAddr" style="font-family:monospace;"></span></div>
+      <div style="margin-bottom:8px;"><strong>🌐 网络 ID:</strong> <span id="debugNetworkId"></span></div>
+      <div style="margin-bottom:8px;"><strong>👤 连接地址:</strong> <span id="debugConnectedAddr" style="font-family:monospace;"></span></div>
+      <button class="btn btn-outline btn-sm" onclick="refreshDebugInfo()" style="margin-top:8px;">刷新调试信息</button>
     </div>
-    <div class="card-body">
-      <div class="form-row">
-        <label>奖励率</label>
-        <input id="committeeRewardRate" class="inp inp-sm inp-num" type="number" placeholder="1000=10%" value="1000">
-        <label style="min-width:auto;">惩罚率</label>
-        <input id="committeePenaltyRate" class="inp inp-sm inp-num" type="number" placeholder="500=5%" value="500">
-        <button class="btn btn-outline btn-sm" onclick="setCommitteeRewardPenalty()">设置</button>
-      </div>
-      <div id="committeeRewardPenaltyResult" class="msg"></div>
+    
+    <div class="form-row">
+      <label>设置审计团队</label>
+      <input id="newAuditTeam" class="inp inp-addr" type="text" placeholder="0x...">
+      <button class="btn btn-primary btn-sm" onclick="setAuditTeam()">设置</button>
     </div>
+    <div id="auditTeamResult" class="msg"></div>
+    <div class="divider"></div>
+    <div class="form-row">
+      <label>检查/转移所有权</label>
+      <input id="newOwner" class="inp inp-addr" type="text" placeholder="0x..." value="0xE3bdE49dA9E2506398Dc3600f65e082C54408048">
+      <button class="btn btn-outline btn-sm" onclick="checkOwnerStatus()">检查状态</button>
+      <button class="btn btn-danger btn-sm" onclick="transferOwnership()">转移</button>
+    </div>
+    <div id="ownershipResult" class="msg"></div>
   </div>
+</div>
 
-  <!-- Contract Params Config -->
-  <div class="card">
-    <div class="card-header">
-      <div class="card-icon purple">⚙️</div>
-      <div>
-        <div class="card-title">合约参数配置</div>
-        <div class="card-desc">配置质押门槛、投票奖惩率、仲裁押金、争议保留期</div>
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="form-row">
-        <label>最低质押量</label>
-        <input id="minStakeAmount" class="inp inp-sm inp-num" type="number" placeholder="CEAT" value="500">
-        <button class="btn btn-outline btn-sm" onclick="setMinStakeAmount()">设置</button>
-      </div>
-      <div class="form-row">
-        <label>投票奖励率</label>
-        <input id="voteRewardRate" class="inp inp-sm inp-num" type="number" placeholder="800=8%" value="800">
-        <label style="min-width:auto;">惩罚率</label>
-        <input id="votePenaltyRate" class="inp inp-sm inp-num" type="number" placeholder="400=4%" value="400">
-        <button class="btn btn-outline btn-sm" onclick="setVoteRewardPenalty()">设置</button>
-      </div>
-      <div class="form-row">
-        <label>仲裁押金</label>
-        <input id="minArbitrationDeposit" class="inp inp-sm inp-num" type="number" placeholder="CEAT" value="1000">
-        <button class="btn btn-outline btn-sm" onclick="setMinArbitrationDeposit()">设置</button>
-      </div>
-      <div class="form-row">
-        <label>争议保留期(天)</label>
-        <input id="disputeRetentionPeriod" class="inp inp-sm inp-num" type="number" placeholder="天" value="3">
-        <button class="btn btn-outline btn-sm" onclick="setDisputeRetentionPeriod()">设置</button>
-      </div>
-      <div id="contractParamsResult" class="msg"></div>
-    </div>
-  </div>
-
-  <!-- Rewards & Slash -->
+  <!-- 10. 资金管理（奖励与惩罚） -->
   <div class="card">
     <div class="card-header">
       <div class="card-icon red">&#9733;</div>
       <div>
-        <div class="card-title">奖励与惩罚</div>
+        <div class="card-title">资金管理</div>
         <div class="card-desc">分配奖励或扣除质押</div>
       </div>
     </div>
@@ -325,7 +328,7 @@
     </div>
   </div>
 
-  <!-- Batch Vote Rewards & Penalties -->
+  <!-- 11. 按提案批量奖惩投票者 -->
   <div class="card">
     <div class="card-header">
       <div class="card-icon orange">&#128202;</div>
@@ -351,21 +354,6 @@
         <button class="btn btn-primary btn-sm" onclick="applyBatchVoteRewards()">执行批量奖惩</button>
       </div>
       <div id="batchVoteRewardsResult" class="msg"></div>
-    </div>
-  </div>
-
-  <!-- Config Viewer -->
-  <div class="card">
-    <div class="card-header">
-      <div class="card-icon purple">&#128203;</div>
-      <div>
-        <div class="card-title">当前合约配置</div>
-        <div class="card-desc">查看 owner、审计团队、委员会等配置</div>
-      </div>
-    </div>
-    <div class="card-body">
-      <button class="btn btn-outline btn-sm" onclick="loadConfig()" style="align-self:flex-start;">刷新配置</button>
-      <pre id="configInfo" class="code-block" style="margin-top:8px;">点击刷新加载配置</pre>
     </div>
   </div>
 
@@ -440,30 +428,6 @@
     }
   }
 
-  async function submitProposal() {
-    const codeHash = document.getElementById("codeHash").value.trim();
-    if (!codeHash) return alert("请输入代码哈希");
-
-    const cleanHash = codeHash.startsWith('0x') || codeHash.startsWith('0X') ? codeHash.slice(2) : codeHash;
-    if (cleanHash.length !== 64) {
-      return alert("无效的哈希格式！请输入 32 字节的十六进制哈希（64个字符）");
-    }
-
-    try {
-      document.getElementById("proposalResult").className = 'msg pending';
-      document.getElementById("proposalResult").innerHTML = '正在创建...';
-      const response = await axios.post(`${BACKEND_API}/admin/create-proposal`, {
-        code_hash: codeHash
-      });
-      const pid = response.data.proposal_id;
-      document.getElementById("proposalResult").className = 'msg success';
-      document.getElementById("proposalResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 提案已创建，ID: ' + pid;
-    } catch (e) {
-      document.getElementById("proposalResult").className = 'msg error';
-      document.getElementById("proposalResult").innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 失败: ' + (e.response?.data?.detail || e.message);
-    }
-  }
-
   function setStartTimeNow() {
     const now = new Date();
     now.setSeconds(0);
@@ -535,7 +499,7 @@
       el.innerHTML = '正在提交社区方案...';
       const codeHashBytes = proposal.codeHash || '0x' + '0'.repeat(64);
       try {
-        const tx1 = await _A().submitCommunityProposal(pid, codeHashBytes);
+        const tx1 = await _A().submitCommunityProposal(pid, codeHashBytes, ethers.constants.HashZero);
         await tx1.wait();
       } catch (submitErr) {
         const msg = (submitErr.data && submitErr.data.message) || submitErr.message || '';
@@ -645,11 +609,11 @@
       document.getElementById("finalizeResult").className = isConsensus ? 'msg success' : 'msg warn';
       document.getElementById("finalizeResult").innerHTML = isConsensus
         ? '<span>&#10004;</span> 提案 ' + pid + ' 达成共识，奖励已自动结算'
-        : '<span>&#9888;</span> 提案 ' + pid + ' 社区与审计团队意见不一致，已进入争议阶段（无奖励发放）';
+        : '<span>&#9888;</span> 提案 ' + pid + ' 社区与审计团队意见不一致，已进入分歧阶段（无奖励发放）';
     } catch (e) { showContractError("finalizeResult", e); }
   }
 
-  // ============ 争议管理 ============
+  // ============ 分歧管理 ============
 
   function _dpid() { return document.getElementById("disputeProposalId").value; }
 
@@ -668,7 +632,7 @@
     const pid = _dpid();
     try {
       document.getElementById("disputeStep1Result").className = 'msg pending';
-      document.getElementById("disputeStep1Result").innerHTML = '正在裁决争议第1步...';
+      document.getElementById("disputeStep1Result").innerHTML = '正在裁决分歧第1步...';
       const tx = await _A().resolveDisputeStep1(pid);
       const receipt = await tx.wait();
       const iface = new ethers.utils.Interface(ContractDefs.auditDAO_ABI);
@@ -707,7 +671,7 @@
       document.getElementById("disputeStep2Result").className = 'msg success';
       document.getElementById("disputeStep2Result").innerHTML = isFinalized
         ? '<span>&#10004;</span> 二次复核通过，提案已终结'
-        : '<span>&#9888;</span> 二次复核未通过，进入第3步：争议委员会裁决（请到 dispute-committee.html）';
+        : '<span>&#9888;</span> 二次复核未通过，进入第3步：分歧委员会裁决（请到 dispute-committee.html）';
     } catch(e) { showContractError("disputeStep2Result", e); }
   }
 
@@ -926,7 +890,20 @@
       document.getElementById("contractParamsResult").innerHTML = '正在设置...';
       const tx = await _A().setDisputeRetentionPeriod(parseInt(days) * 86400);
       await tx.wait();
-      showParamsResult('争议保留期已设为 ' + days + ' 天');
+      showParamsResult('分歧保留期已设为 ' + days + ' 天');
+    } catch (e) { showContractError("contractParamsResult", e); }
+  }
+
+  async function setMinCommitteeStake() {
+    if (!_S()) return alert("请先连接钱包");
+    const amount = document.getElementById("minCommitteeStakeAmount").value;
+    if (!amount) return alert("请输入数量");
+    try {
+      document.getElementById("contractParamsResult").className = 'msg pending';
+      document.getElementById("contractParamsResult").innerHTML = '正在设置...';
+      const tx = await _A().setMinCommitteeStake(ethers.utils.parseEther(amount));
+      await tx.wait();
+      showParamsResult('委员会最低质押已设为 ' + amount + ' CEAT');
     } catch (e) { showContractError("contractParamsResult", e); }
   }
 

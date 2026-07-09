@@ -4,13 +4,13 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CreatDAO - 争议委员会端</title>
+  <title>CreatDAO - 分歧委员会端</title>
   <link rel="stylesheet" href="common.css?v=2">
   <script src="lib/ethers.min.js?v=2"></script>
   <script src="lib/axios.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=10"></script>
+  <script src="contract.js?v=11"></script>
   <script src="wallet.js?v=3"></script>
   <style>
     .wallet-area { display: flex; align-items: center; gap: 10px; }
@@ -51,7 +51,7 @@
     <div class="header-left">
       <div class="logo">⚖️</div>
       <div class="title">
-        <h1>争议委员会端</h1>
+        <h1>分歧委员会端</h1>
         <span>CreatDAO Dispute Committee Panel</span>
       </div>
     </div>
@@ -69,20 +69,21 @@
         </div>
       </span>
       <button class="btn btn-outline btn-sm" id="walletBtn" onclick="Wallet.handleWalletClick()" style="color:#81c784;">🔌 连接钱包</button>
-      <button class="btn btn-outline" onclick="window.location.href='home.html'">返回主页面</button>
+      <a href="home.html" class="btn btn-outline btn-sm" style="text-decoration:none;">← 返回主页</a>
     </div>
   </header>
 
   <div class="panel-header">
-    <p>争议委员会成员专属操作面板</p>
+    <p>分歧委员会成员专属操作面板</p>
   </div>
 
+  <!-- 1. 委员会投票 -->
   <div class="card">
     <div class="card-header">
       <div class="card-icon orange">⚖️</div>
       <div>
         <div class="card-title">委员会投票</div>
-        <div class="card-desc">对争议提案进行投票，支持审计方或社区方</div>
+        <div class="card-desc">对分歧提案进行投票，支持审计方或社区方</div>
       </div>
     </div>
     <div class="card-body">
@@ -99,12 +100,13 @@
     </div>
   </div>
 
+  <!-- 2. 提案状态查询（查看投票结果） -->
   <div class="card">
     <div class="card-header">
       <div class="card-icon purple">📊</div>
       <div>
-        <div class="card-title">查看投票结果</div>
-        <div class="card-desc">查询争议提案的委员会投票状态</div>
+        <div class="card-title">提案状态查询</div>
+        <div class="card-desc">查询分歧提案的委员会投票状态</div>
       </div>
     </div>
     <div class="card-body">
@@ -117,24 +119,7 @@
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-header">
-      <div class="card-icon green">✓</div>
-      <div>
-        <div class="card-title">确认否决提案</div>
-        <div class="card-desc">对审计团队发起的否决提案进行确认投票</div>
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="form-row">
-        <label>否决提案 ID</label>
-        <input id="vetoProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
-        <button class="btn btn-primary btn-sm" onclick="confirmVeto()">确认否决</button>
-      </div>
-      <div id="vetoConfirmResult" class="msg"></div>
-    </div>
-  </div>
-
+  <!-- 3. 查看否决提案详情 -->
   <div class="card">
     <div class="card-header">
       <div class="card-icon red">📋</div>
@@ -153,12 +138,32 @@
     </div>
   </div>
 
+  <!-- 4. 确认否决提案 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon green">✓</div>
+      <div>
+        <div class="card-title">确认否决提案</div>
+        <div class="card-desc">对审计团队发起的否决提案进行确认投票</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <label>否决提案 ID</label>
+        <input id="vetoProposalId" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0">
+        <button class="btn btn-primary btn-sm" onclick="confirmVeto()">确认否决</button>
+      </div>
+      <div id="vetoConfirmResult" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- 5. 委员会成员信息 -->
   <div class="card">
     <div class="card-header">
       <div class="card-icon purple">👥</div>
       <div>
-        <div class="card-title">查看委员会成员</div>
-        <div class="card-desc">查看争议委员会所有成员地址及其质押与信誉信息</div>
+        <div class="card-title">委员会成员信息</div>
+        <div class="card-desc">查看分歧委员会所有成员地址及其质押与信誉信息</div>
       </div>
     </div>
     <div class="card-body">
@@ -222,14 +227,14 @@
 
       const isAuditTeam = roles.audit_team && roles.audit_team.toLowerCase() === Wallet.getAddress().toLowerCase();
       if (isAuditTeam) {
-        alert('❌ 审计团队无权访问争议委员会端！\n\n审计团队只能访问审计团队端，请返回用户端后点击"切换至审计团队"');
+        alert('❌ 审计团队无权访问分歧委员会端！\n\n审计团队只能访问审计团队端，请返回用户端后点击"切换至审计团队"');
         window.location.href = 'home.html';
         return;
       }
 
       const isCommitteeMember = roles.is_committee === true;
       if (!isCommitteeMember) {
-        alert('❌ 无权限访问争议委员会端！\n\n只有以下角色可以访问：\n• Owner\n• 争议委员会成员\n\n即将跳转到主页面...');
+        alert('❌ 无权限访问分歧委员会端！\n\n只有以下角色可以访问：\n• Owner\n• 分歧委员会成员\n\n即将跳转到主页面...');
         window.location.href = 'home.html';
         return;
       }
@@ -249,6 +254,28 @@
       return;
     }
     const supportAuditor = checkedRadio.value === 'true';
+
+    // 质押检查
+    try {
+      const dao = Wallet.getContracts().auditDAO;
+      const userAddr = Wallet.getAddress();
+      const stake = await dao.committeeStakes(userAddr);
+      const minStake = await dao.minCommitteeStake();
+      if (stake.lt(minStake)) {
+        const need = ethers.utils.formatEther(minStake.sub(stake));
+        const have = ethers.utils.formatEther(stake);
+        const min = ethers.utils.formatEther(minStake);
+        if (!confirm('⚠️ 委员会质押不足！\n\n当前质押: ' + have + ' CEAT\n最低要求: ' + min + ' CEAT\n还需质押: ' + need + ' CEAT\n\n请先在用户端通过 stakeAsCommittee 质押足够 CEAT。\n\n是否仍然继续投票？（可能失败）')) {
+          const el = document.getElementById("committeeVoteResult");
+          el.className = 'msg';
+          el.innerHTML = '已取消投票。请先质押足够 CEAT 后再投票。';
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('质押检查失败，继续投票:', e.message);
+    }
+
     try {
       document.getElementById("committeeVoteResult").className = 'msg pending';
       document.getElementById("committeeVoteResult").innerHTML = '正在投票...';

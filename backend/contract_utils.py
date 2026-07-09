@@ -19,7 +19,7 @@ PROPOSAL_STATUS_MAP = [
 ]
 PROPOSAL_STATUS_CN = [
     "已录入", "团队审核中", "社区审核中", "公开讨论",
-    "争议判断", "二次复核", "委员会裁决", "独立仲裁",
+    "分歧判断", "二次复核", "委员会裁决", "独立仲裁",
     "已终结",
 ]
 RISK_LEVEL_MAP = ["None", "Low", "Medium", "High", "Critical"]
@@ -243,11 +243,11 @@ def apply_vote_rewards_on_chain(proposal_id, final_hash_bytes):
 def committee_vote_on_chain(proposal_id, support_auditor):
     return chain_call(audit_dao_contract.functions.committeeVote, proposal_id, support_auditor)
 
-def submit_audit_report_on_chain(proposal_id, report_hash_bytes):
-    return chain_call(audit_dao_contract.functions.submitTeamReport, proposal_id, report_hash_bytes)
+def submit_audit_report_on_chain(proposal_id, report_hash_bytes, matrix_hash_bytes):
+    return chain_call(audit_dao_contract.functions.submitTeamReport, proposal_id, report_hash_bytes, matrix_hash_bytes)
 
-def submit_community_proposal_on_chain(proposal_id, result_hash_bytes):
-    return chain_call(audit_dao_contract.functions.submitCommunityProposal, proposal_id, result_hash_bytes)
+def submit_community_proposal_on_chain(proposal_id, result_hash_bytes, matrix_hash_bytes):
+    return chain_call(audit_dao_contract.functions.submitCommunityProposal, proposal_id, result_hash_bytes, matrix_hash_bytes)
 
 def stake_on_chain(amount):
     return chain_call(audit_dao_contract.functions.stake, amount)

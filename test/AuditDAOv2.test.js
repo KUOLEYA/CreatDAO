@@ -8,6 +8,7 @@ describe("AuditDAOv2 - V1 全功能测试", function () {
 
   const MIN_STAKE = ethers.parseEther("500");
   const STAKE_AMOUNT = ethers.parseEther("1000");
+  const MIN_COMMITTEE_STAKE = ethers.parseEther("10000");
   const INITIAL_SUPPLY = ethers.parseEther("1000000");
 
   before(async function () {
@@ -55,6 +56,12 @@ describe("AuditDAOv2 - V1 全功能测试", function () {
     const users = [user1, user2, user3, user4, member1, member2, member3];
     for (const u of users) {
       await ceat.transfer(u.address, ethers.parseEther("10000"));
+    }
+
+    // 7. 给委员会成员分配代币用于质押
+    const committeeMembers = [committee1, committee2, committee3, committee4, committee5];
+    for (const cm of committeeMembers) {
+      await ceat.transfer(cm.address, ethers.parseEther("20000"));
     }
   });
 
@@ -195,7 +202,7 @@ describe("AuditDAOv2 - V1 全功能测试", function () {
     it("不能重复接取同一个提案", async function () {
       await expect(
         dao.connect(owner).claimProposal(0, 0)
-      ).to.be.revertedWith("Already claimed");
+      ).to.be.revertedWith("Already claimed by you");
     });
   });
 
@@ -204,7 +211,7 @@ describe("AuditDAOv2 - V1 全功能测试", function () {
     it("审计团队应提交报告", async function () {
       await dao.setAuditTeam(auditTeam.address);
       const reportHash = ethers.keccak256(ethers.toUtf8Bytes("team_report_v1"));
-      await dao.connect(owner).submitTeamReport(0, reportHash);
+      await dao.connect(owner).submitTeamReport(0, reportHash, reportHash);
       const proposal = await dao.proposals(0);
       expect(proposal.auditReportHash).to.equal(reportHash);
       expect(proposal.status).to.equal(1n); // TeamReview
@@ -234,7 +241,7 @@ describe("AuditDAOv2 - V1 全功能测试", function () {
 
     it("质押者应提交社区方案", async function () {
       const resultHash = ethers.keccak256(ethers.toUtf8Bytes("community_result_v1"));
-      await dao.connect(user1).submitCommunityProposal(0, resultHash);
+      await dao.connect(user1).submitCommunityProposal(0, resultHash, resultHash);
       const hashes = await dao.getCommunityProposalHashes(0);
       expect(hashes.length).to.equal(1);
     });
@@ -314,6 +321,18 @@ describe("AuditDAOv2 - V1 全功能测试", function () {
     });
 
     it("委员会成员应投票（支持社区方）", async function () {
+      // 委员会成员完成质押
+      await ceat.connect(committee1).approve(dao.target, MIN_COMMITTEE_STAKE);
+      await dao.connect(committee1).stakeAsCommittee(MIN_COMMITTEE_STAKE);
+      await ceat.connect(committee2).approve(dao.target, MIN_COMMITTEE_STAKE);
+      await dao.connect(committee2).stakeAsCommittee(MIN_COMMITTEE_STAKE);
+      await ceat.connect(committee3).approve(dao.target, MIN_COMMITTEE_STAKE);
+      await dao.connect(committee3).stakeAsCommittee(MIN_COMMITTEE_STAKE);
+      await ceat.connect(committee4).approve(dao.target, MIN_COMMITTEE_STAKE);
+      await dao.connect(committee4).stakeAsCommittee(MIN_COMMITTEE_STAKE);
+      await ceat.connect(committee5).approve(dao.target, MIN_COMMITTEE_STAKE);
+      await dao.connect(committee5).stakeAsCommittee(MIN_COMMITTEE_STAKE);
+
       await dao.connect(committee1).committeeVote(0, false); // 支持社区
       await dao.connect(committee2).committeeVote(0, false);
       await dao.connect(committee3).committeeVote(0, false); // 3票 → 社区胜
@@ -333,9 +352,9 @@ describe("AuditDAOv2 - V1 全功能测试", function () {
       const reportHash = ethers.keccak256(ethers.toUtf8Bytes("team_report_v2"));
       const resultHash = ethers.keccak256(ethers.toUtf8Bytes("community_result_v2"));
 
-      await dao.connect(owner).submitTeamReport(2, reportHash);
+      await dao.connect(owner).submitTeamReport(2, reportHash, reportHash);
       await dao.connect(owner).startCommunityReview(2);
-      await dao.connect(user1).submitCommunityProposal(2, resultHash);
+      await dao.connect(user1).submitCommunityProposal(2, resultHash, resultHash);
       await dao.connect(owner).startVoting(2);
       await dao.connect(user1).vote(2, resultHash, 0);
 
@@ -382,11 +401,11 @@ describe("AuditDAOv2 - V1 全功能测试", function () {
       // 提案1目前是Submitted状态，需要走完前面的流程到CommitteeRuling
       await dao.setAuditTeam(auditTeam.address);
       const reportHash = ethers.keccak256(ethers.toUtf8Bytes("team_report_veto"));
-      await dao.connect(owner).submitTeamReport(1, reportHash);
+      await dao.connect(owner).submitTeamReport(1, reportHash, reportHash);
 
       await dao.connect(owner).startCommunityReview(1);
       const resultHash = ethers.keccak256(ethers.toUtf8Bytes("community_veto"));
-      await dao.connect(user1).submitCommunityProposal(1, resultHash);
+      await dao.connect(user1).submitCommunityProposal(1, resultHash, resultHash);
       await dao.connect(owner).startVoting(1);
       await dao.connect(user1).vote(1, resultHash, 0);
 
@@ -417,10 +436,10 @@ describe("AuditDAOv2 - V1 全功能测试", function () {
       );
       const idx = 3;
       const rptHash = ethers.keccak256(ethers.toUtf8Bytes("team_rpt_veto2"));
-      await dao.connect(owner).submitTeamReport(idx, rptHash);
+      await dao.connect(owner).submitTeamReport(idx, rptHash, rptHash);
       await dao.connect(owner).startCommunityReview(idx);
       const resHash = ethers.keccak256(ethers.toUtf8Bytes("comm_veto2"));
-      await dao.connect(user1).submitCommunityProposal(idx, resHash);
+      await dao.connect(user1).submitCommunityProposal(idx, resHash, resHash);
       await dao.connect(owner).startVoting(idx);
       await dao.connect(user1).vote(idx, resHash, 0);
       await ethers.provider.send("evm_increaseTime", [7 * 24 * 3600 + 1]);
@@ -441,6 +460,18 @@ describe("AuditDAOv2 - V1 全功能测试", function () {
 
     it("应能通过委员会投票终结提案", async function () {
       const idx = 3;
+      // 委员会成员完成质押
+      await ceat.connect(committee1).approve(dao.target, MIN_COMMITTEE_STAKE);
+      await dao.connect(committee1).stakeAsCommittee(MIN_COMMITTEE_STAKE);
+      await ceat.connect(committee2).approve(dao.target, MIN_COMMITTEE_STAKE);
+      await dao.connect(committee2).stakeAsCommittee(MIN_COMMITTEE_STAKE);
+      await ceat.connect(committee3).approve(dao.target, MIN_COMMITTEE_STAKE);
+      await dao.connect(committee3).stakeAsCommittee(MIN_COMMITTEE_STAKE);
+      await ceat.connect(committee4).approve(dao.target, MIN_COMMITTEE_STAKE);
+      await dao.connect(committee4).stakeAsCommittee(MIN_COMMITTEE_STAKE);
+      await ceat.connect(committee5).approve(dao.target, MIN_COMMITTEE_STAKE);
+      await dao.connect(committee5).stakeAsCommittee(MIN_COMMITTEE_STAKE);
+
       await dao.connect(committee1).committeeVote(idx, false); // 支持社区
       await dao.connect(committee2).committeeVote(idx, false);
       await dao.connect(committee3).committeeVote(idx, false); // 3票 → 社区胜

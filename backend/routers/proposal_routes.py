@@ -300,7 +300,7 @@ def get_proposal_full_info(proposal_id: int, db: Session = Depends(get_db)):
             "风险等级": RISK_LEVEL_MAP[risk_idx] if risk_idx < len(RISK_LEVEL_MAP) else str(risk_idx),
             "创建时间": on_chain_proposal[7],
             "创建时间(可读)": datetime.fromtimestamp(on_chain_proposal[7], tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC') if on_chain_proposal[7] > 0 else "无",
-            "争议创建时间": on_chain_proposal[8],
+            "分歧创建时间": on_chain_proposal[8],
             "已申请仲裁": on_chain_proposal[9],
             "社区方案总数": len(community_proposals),
             "社区方案详情": community_proposals,

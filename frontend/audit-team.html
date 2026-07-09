@@ -10,7 +10,7 @@
   <script src="lib/axios.min.js?v=2"></script>
   <script src="common.js?v=3"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=10"></script>
+  <script src="contract.js?v=11"></script>
   <script src="wallet.js?v=3"></script>
   <style>
 .status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 16px; font-size: 11px; font-weight: 600; }
@@ -56,7 +56,7 @@
         </div>
       </span>
       <button class="btn btn-outline btn-sm" id="walletBtn" onclick="Wallet.handleWalletClick()" style="color:#81c784;">🔌 连接钱包</button>
-      <button class="btn btn-outline" onclick="window.location.href='home.html'">返回主页面</button>
+      <a href="home.html" class="btn btn-outline btn-sm" style="text-decoration:none;">← 返回主页</a>
     </div>
   </header>
 
@@ -228,7 +228,7 @@
     try {
       document.getElementById("reportResult").className = 'msg pending';
       document.getElementById("reportResult").innerHTML = '正在提交...';
-      const tx = await Wallet.getContracts().auditDAO.submitTeamReport(pid, hash);
+      const tx = await Wallet.getContracts().auditDAO.submitTeamReport(pid, hash, ethers.constants.HashZero);
       await tx.wait();
       document.getElementById("reportResult").className = 'msg success';
       document.getElementById("reportResult").innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 报告已提交 (提案' + pid + ')';
@@ -278,7 +278,7 @@
       const isMember = await Wallet.getContracts().auditDAO.isCommitteeMember(Wallet.getAddress());
       if (!isMember) {
         el.className = 'msg error';
-        el.innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 您不是争议委员会成员，无法确认否决。请使用委员会成员账户或在管理端设置委员会成员。';
+        el.innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 您不是分歧委员会成员，无法确认否决。请使用委员会成员账户或在管理端设置委员会成员。';
         return;
       }
 

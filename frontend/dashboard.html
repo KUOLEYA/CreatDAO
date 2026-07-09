@@ -10,7 +10,7 @@
   <script src="lib/axios.min.js?v=2"></script>
   <script src="common.js?v=2"></script>
   <script src="config.js?v=4"></script>
-  <script src="contract.js?v=10"></script>
+  <script src="contract.js?v=11"></script>
   <script src="wallet.js?v=3"></script>
   <style>
 .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
@@ -105,15 +105,9 @@
         </div>
       </span>
       <button class="btn btn-outline btn-sm" id="walletBtn" onclick="Wallet.handleWalletClick()" style="color:#81c784;">🔌 连接钱包</button>
+      <a href="home.html" class="btn btn-outline btn-sm" style="text-decoration:none;">← 返回主页</a>
     </div>
   </header>
-
-  <!-- ========== 返回主页 ========== -->
-  <div style="display: flex; gap: 12px; margin-bottom: 24px; justify-content: center; flex-wrap: wrap;">
-    <button class="btn btn-outline" onclick="window.location.href='home.html'">
-      ← 返回主页
-    </button>
-  </div>
 
   <!-- ========== PANEL 1: COMMUNITY ========== -->
   <div id="panel-community" class="panel active">
@@ -122,12 +116,60 @@
       <p>质押 CEAT 代币后即可提交审计并参与社区投票</p>
     </div>
 
-    <!-- Staking -->
+    <!-- 0. 🏆 奖励公告栏 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon gold">🏆</div>
+        <div>
+          <div class="card-title">奖励公告栏</div>
+          <div class="card-desc">查看所有参与者待领取的 CEAT 奖励，公开透明</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="rewardBoardList" style="font-size:13px; color:rgba(255,255,255,0.6);">连接钱包后自动加载...</div>
+      </div>
+    </div>
+
+    <!-- 0b. 💰 领取奖励 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon purple">💰</div>
+        <div>
+          <div class="card-title">领取奖励</div>
+          <div class="card-desc">提取投票和社区参与累积的 CEAT 奖励</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-row">
+          <span>待领取奖励: <strong id="pendingRewards" style="color:#fbbf24;">0</strong> CEAT</span>
+          <button class="btn btn-primary btn-sm" onclick="claimRewards()">领取奖励</button>
+        </div>
+        <div id="claimResult" class="msg"></div>
+      </div>
+    </div>
+
+    <!-- 0c. 📋 待办事项 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon gold">📋</div>
+        <div>
+          <div class="card-title">待办事项</div>
+          <div class="card-desc">自动检测当前钱包需要执行的操作</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="pendingTasksList" style="display: flex; flex-direction: column; gap:8px;">
+          <span style="color:rgba(255,255,255,0.4); font-size:13px;">连接钱包后自动检测...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1. Staking - 质押 CEAT（先决条件，质押后才能做其他操作） -->
     <div class="card">
       <div class="card-header">
         <div class="card-icon green">&#9829;</div>
         <div>
-          <div class="card-title">质押</div>
+          <div class="card-title">质押 CEAT</div>
           <div class="card-desc">授权并质押 CEAT 代币以参与社区治理</div>
         </div>
       </div>
@@ -146,7 +188,7 @@
       </div>
     </div>
 
-    <!-- Unstake -->
+    <!-- 2. Unstake - 解除质押 -->
     <div class="card">
       <div class="card-header">
         <div class="card-icon red">&#8634;</div>
@@ -165,62 +207,41 @@
       </div>
     </div>
 
-    <!-- 奖励公告栏 -->
+    <!-- 3. 🎯 领取提案并开始审核 -->
     <div class="card">
       <div class="card-header">
-        <div class="card-icon gold">🏆</div>
+        <div class="card-icon orange">🎯</div>
         <div>
-          <div class="card-title">奖励公告栏</div>
-          <div class="card-desc">查看所有参与者待领取的 CEAT 奖励，公开透明</div>
+          <div class="card-title">领取提案并开始审核</div>
+          <div class="card-desc">质押至少500 CEAT可领取提案，领取后可提交审计方案</div>
         </div>
       </div>
       <div class="card-body">
-        <button class="btn btn-outline btn-sm" onclick="loadRewardBoard()" style="align-self:flex-start; margin-bottom:10px;">刷新公告栏</button>
-        <div id="rewardBoardList" style="font-size:13px; color:rgba(255,255,255,0.6);">点击刷新加载...</div>
+        <button class="btn btn-outline btn-sm" onclick="loadAvailableTasks()" style="align-self:flex-start; margin-bottom:10px;">刷新可领取任务列表</button>
+        <div id="availableTasksList" style="display: flex; flex-direction: column; gap:12px;"></div>
       </div>
     </div>
 
-    <!-- Claim Rewards -->
+    <!-- 4. 📑 已提交方案 -->
     <div class="card">
       <div class="card-header">
-        <div class="card-icon purple">💰</div>
+        <div class="card-icon purple">&#128209;</div>
         <div>
-          <div class="card-title">领取奖励</div>
-          <div class="card-desc">提取投票和社区参与累积的 CEAT 奖励</div>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="form-row">
-          <span>待领取奖励: <strong id="pendingRewards" style="color:#fbbf24;">0</strong> CEAT</span>
-          <button class="btn btn-primary btn-sm" onclick="claimRewards()">领取奖励</button>
-        </div>
-        <div id="claimResult" class="msg"></div>
-      </div>
-    </div>
-
-    <!-- Buy CEAT -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-icon green">&#x24;</div>
-        <div>
-          <div class="card-title">购买CEAT</div>
-          <div class="card-desc">1 ETH = 100 CEAT</div>
+          <div class="card-title">已提交方案</div>
+          <div class="card-desc">查看指定提案下所有社区已提交的方案及投票数</div>
         </div>
       </div>
       <div class="card-body">
         <div class="form-row">
-          <label>ETH 数量</label>
-          <input id="ethAmount" class="inp inp-sm" type="number" value="0.01" step="0.001" placeholder="0.01" min="0">
-          <button class="btn btn-success btn-sm" onclick="buyCEAT()">购买CEAT</button>
+          <label>提案 ID</label>
+          <input id="queryProposalId" class="inp inp-sm inp-num" type="number" value="0" placeholder="ID" min="0">
+          <button class="btn btn-primary btn-sm" onclick="queryCommunityProposals()">查询已提交方案</button>
         </div>
-        <div class="form-row">
-          <span>将获得: <strong id="estimatedCEAT">1.0000</strong> CEAT</span>
-        </div>
-        <div id="buyResult" class="msg"></div>
+        <div id="communityProposalsList" style="margin-top:10px;"></div>
       </div>
     </div>
 
-    <!-- Proposal Info -->
+    <!-- 5. ☰ 查看提案信息 -->
     <div class="card">
       <div class="card-header">
         <div class="card-icon purple">&#9776;</div>
@@ -240,26 +261,7 @@
       </div>
     </div>
 
-    <!-- Query Submitted Proposals -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-icon purple">&#128209;</div>
-        <div>
-          <div class="card-title">已提交方案</div>
-          <div class="card-desc">查看指定提案下所有社区已提交的方案及投票数</div>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="form-row">
-          <label>提案 ID</label>
-          <input id="queryProposalId" class="inp inp-sm inp-num" type="number" value="0" placeholder="ID" min="0">
-          <button class="btn btn-primary btn-sm" onclick="queryCommunityProposals()">查询已提交方案</button>
-        </div>
-        <div id="communityProposalsList" style="margin-top:10px;"></div>
-      </div>
-    </div>
-
-    <!-- Vote -->
+    <!-- 6. ✓ 投票 -->
     <div class="card">
       <div class="card-header">
         <div class="card-icon cyan">&#10003;</div>
@@ -292,35 +294,20 @@
       </div>
     </div>
 
-    <!-- Community Task Claiming -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-icon orange">🎯</div>
-        <div>
-          <div class="card-title">领取提案并开始审核</div>
-          <div class="card-desc">质押至少500 CEAT可领取提案，领取后可提交审计方案</div>
-        </div>
-      </div>
-      <div class="card-body">
-        <button class="btn btn-outline btn-sm" onclick="loadAvailableTasks()" style="align-self:flex-start; margin-bottom:10px;">刷新可领取任务列表</button>
-        <div id="availableTasksList" style="display: flex; flex-direction: column; gap:12px;"></div>
-      </div>
-    </div>
-
-    <!-- 争议投票 -->
+    <!-- 7. ⚖️ 分歧投票 -->
     <div class="card">
       <div class="card-header">
         <div class="card-icon red">⚖️</div>
         <div>
-          <div class="card-title">争议投票</div>
-          <div class="card-desc">当提案进入争议阶段时，在此投票表达立场</div>
+          <div class="card-title">分歧投票</div>
+          <div class="card-desc">当提案进入分歧阶段时，在此投票表达立场</div>
         </div>
       </div>
       <div class="card-body">
         <div class="form-row">
           <label>提案 ID</label>
           <input id="disputeVotePid" class="inp inp-sm inp-num" type="number" placeholder="ID" value="0" min="0" onchange="checkDisputePhase()">
-          <button class="btn btn-outline btn-sm" onclick="checkDisputePhase()">检查争议阶段</button>
+          <button class="btn btn-outline btn-sm" onclick="checkDisputePhase()">检查分歧阶段</button>
         </div>
         <div id="disputePhaseInfo" class="msg" style="margin-bottom:8px;"></div>
         <div id="disputeStep1Btns" style="display:none;">
@@ -341,7 +328,28 @@
       </div>
     </div>
 
-    <!-- Audit Teams List -->
+    <!-- 9. 🏛️ 分歧委员会成员 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon purple">👥</div>
+        <div>
+          <div class="card-title">分歧委员会成员</div>
+          <div class="card-desc">查看分歧委员会成员地址及其质押与信誉信息</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <button class="btn btn-outline btn-sm" onclick="loadCommitteeMembers()" style="align-self:flex-start; margin-bottom:10px;">刷新成员列表</button>
+        <div style="display:flex; gap:8px; margin-bottom:10px;">
+          <input id="committeeStakeAmount" class="inp inp-sm inp-num" type="text" placeholder="质押数量" value="500" style="width:120px;">
+          <button class="btn btn-success btn-sm" onclick="stakeAsCommittee()">🏛️ 质押委员会席位</button>
+          <button class="btn btn-outline btn-sm" onclick="unstakeAsCommittee()">解除委员会质押</button>
+        </div>
+        <div id="committeeStakeResult" class="msg"></div>
+        <div id="committeeMembersList" style="display: flex; flex-direction: column; gap:12px;"></div>
+      </div>
+    </div>
+
+    <!-- 审计团队 -->
     <div class="card">
       <div class="card-header">
         <div class="card-icon cyan">&#128100;</div>
@@ -356,22 +364,43 @@
       </div>
     </div>
 
-    <!-- Committee Members -->
+    <!-- 12. $ 购买CEAT -->
     <div class="card">
       <div class="card-header">
-        <div class="card-icon purple">👥</div>
+        <div class="card-icon green">&#x24;</div>
         <div>
-          <div class="card-title">争议委员会成员</div>
-          <div class="card-desc">查看争议委员会成员地址及其质押与信誉信息</div>
+          <div class="card-title">购买CEAT</div>
+          <div class="card-desc">1 ETH = 100 CEAT</div>
         </div>
       </div>
       <div class="card-body">
-        <button class="btn btn-outline btn-sm" onclick="loadCommitteeMembers()" style="align-self:flex-start; margin-bottom:10px;">刷新成员列表</button>
-        <div id="committeeMembersList" style="display: flex; flex-direction: column; gap:12px;"></div>
+        <div class="form-row">
+          <label>ETH 数量</label>
+          <input id="ethAmount" class="inp inp-sm" type="number" value="0.01" step="0.001" placeholder="0.01" min="0">
+          <button class="btn btn-success btn-sm" onclick="buyCEAT()">购买CEAT</button>
+        </div>
+        <div class="form-row">
+          <span>将获得: <strong id="estimatedCEAT">1.0000</strong> CEAT</span>
+        </div>
+        <div id="buyResult" class="msg"></div>
       </div>
     </div>
   </div>
 
+</div>
+
+<!-- ========== 方案内容查看模态框 ========== -->
+<div class="modal-overlay" id="reportModal" onclick="if(event.target===this)closeReportModal()">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <span class="modal-title" id="reportModalTitle">方案内容</span>
+      <button class="modal-close" onclick="closeReportModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="report-meta" id="reportModalMeta"></div>
+      <div class="report-content" id="reportModalBody"></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -452,13 +481,13 @@
       const isAuditTeam = roles.audit_team && roles.audit_team.toLowerCase() === _U().toLowerCase();
       
       if (isAuditTeam && !isOwner) {
-        alert('❌ 审计团队无权访问争议委员会端！\n\n审计团队只能访问审计团队端，请点击"跳转审计团队端"');
+        alert('❌ 审计团队无权访问分歧委员会端！\n\n审计团队只能访问审计团队端，请点击"跳转审计团队端"');
         return;
       }
       
       const isCommitteeMember = roles.is_committee === true;
       if (!isOwner && !isCommitteeMember) {
-        alert('❌ 无权限访问争议委员会端！\n\n只有以下角色可以访问：\n• Owner\n• 争议委员会成员');
+        alert('❌ 无权限访问分歧委员会端！\n\n只有以下角色可以访问：\n• Owner\n• 分歧委员会成员');
         return;
       }
       
@@ -476,6 +505,151 @@
     window.location.href = 'ai-review.html';
   }
 
+  var _pendingTasksLoading = false;
+
+  async function checkPendingTasks() {
+    if (_pendingTasksLoading) return;
+    _pendingTasksLoading = true;
+    const container = document.getElementById('pendingTasksList');
+    if (!_U()) {
+      container.innerHTML = '<span style="color:rgba(255,255,255,0.4); font-size:13px;">请先连接钱包</span>';
+      _pendingTasksLoading = false;
+      return;
+    }
+    if (!_A()) {
+      container.innerHTML = '<span style="color:rgba(255,255,255,0.4); font-size:13px;">合约未初始化，请稍后再试</span>';
+      _pendingTasksLoading = false;
+      return;
+    }
+
+    container.innerHTML = '<span style="color:rgba(255,255,255,0.4); font-size:13px;"><span class="spinner"></span> 检测中...</span>';
+
+    try {
+      const userAddr = _U().toLowerCase();
+      const tasks = [];
+
+      // 获取审计团队地址
+      let auditTeamAddr = '';
+      try {
+        auditTeamAddr = await _A().auditTeam();
+      } catch (e) { /* 忽略 */ }
+
+      // 获取委员会成员列表
+      let committeeMembers = [];
+      try {
+        committeeMembers = await _A().getCommitteeMembers();
+      } catch (e) { /* 忽略 */ }
+
+      const isAuditTeam = auditTeamAddr && auditTeamAddr.toLowerCase() === userAddr;
+      const isCommittee = committeeMembers.some(function(m) {
+        return m && m !== '0x' + '0'.repeat(40) && m.toLowerCase() === userAddr;
+      });
+
+      // 遍历提案 0-9 查找活跃提案
+      for (let pid = 0; pid <= 9; pid++) {
+        try {
+          const p = await _A().getProposalSummary(pid);
+          const status = Number(p.status);
+          const codeHash = p.codeHash;
+
+          // 跳过不存在的提案（codeHash 为 0 且 status 为 0）
+          if ((!codeHash || codeHash === '0x' + '0'.repeat(64)) && status === 0) continue;
+
+          // 审计团队 + SecondReview(5) → 提交修订报告
+          if (isAuditTeam && status === 5) {
+            tasks.push({
+              text: '提交修订报告（提案#' + pid + '）',
+              link: 'audit-team.html?proposal=' + pid,
+              type: 'audit'
+            });
+          }
+
+          // 委员会成员 + CommitteeRuling(6) → 参与委员会投票
+          if (isCommittee && status === 6) {
+            tasks.push({
+              text: '参与委员会投票（提案#' + pid + '）',
+              link: 'dispute-committee.html?proposal=' + pid,
+              type: 'committee'
+            });
+          }
+
+          // 社区用户 + FirstDispute(4) → 参与分歧投票
+          if (!isAuditTeam && !isCommittee && status === 4) {
+            tasks.push({
+              text: '参与分歧投票（提案#' + pid + '）',
+              link: '#',
+              type: 'dispute',
+              action: function() {
+                document.getElementById('disputeVotePid').value = pid;
+                document.getElementById('disputePhaseInfo').scrollIntoView({behavior: 'smooth', block: 'center'});
+                var infoEl = document.getElementById('disputePhaseInfo');
+                infoEl.className = 'msg';
+                infoEl.innerHTML = '已定位到提案 #' + pid + '，请点击「检查分歧阶段」按钮查看状态并投票';
+              }
+            });
+          }
+
+          // 社区用户 + SecondReview(5) → 参与二次复核投票
+          if (!isAuditTeam && !isCommittee && status === 5) {
+            tasks.push({
+              text: '参与二次复核投票（提案#' + pid + '）',
+              link: '#',
+              type: 'dispute',
+              action: function() {
+                document.getElementById('disputeVotePid').value = pid;
+                document.getElementById('disputePhaseInfo').scrollIntoView({behavior: 'smooth', block: 'center'});
+                var infoEl = document.getElementById('disputePhaseInfo');
+                infoEl.className = 'msg';
+                infoEl.innerHTML = '已定位到提案 #' + pid + '，请点击「检查分歧阶段」按钮查看状态并投票';
+              }
+            });
+          }
+        } catch (e) {
+          // 查询失败，跳过该提案
+          continue;
+        }
+      }
+
+      // 渲染结果
+      if (tasks.length === 0) {
+        container.innerHTML = '<span style="color:rgba(255,255,255,0.4); font-size:13px;">✅ 暂无待办事项</span>';
+      } else {
+        let html = '';
+        for (let i = 0; i < tasks.length; i++) {
+          var t = tasks[i];
+          var icon = t.type === 'audit' ? '📝' : (t.type === 'committee' ? '⚖️' : '🗳️');
+          var color = t.type === 'audit' ? '#ce93d8' : (t.type === 'committee' ? '#80deea' : '#ffcc80');
+          html += '<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:10px; cursor:pointer; transition:all 0.2s;"';
+          if (t.action) {
+            html += ' data-task-idx="' + i + '"';
+          } else if (t.onclick) {
+            html += ' onclick="' + t.onclick + '"';
+          } else if (t.link) {
+            html += ' onclick="window.location.href=\'' + t.link + '\'"';
+          }
+          html += ' onmouseover="this.style.borderColor=\'rgba(102,126,234,0.3)\';this.style.background=\'rgba(255,255,255,0.07)\'" onmouseout="this.style.borderColor=\'rgba(255,255,255,0.06)\';this.style.background=\'rgba(255,255,255,0.04)\'">';
+          html += '<span style="display:flex;align-items:center;gap:8px;font-size:13px;color:' + color + ';">' + icon + ' ' + t.text + '</span>';
+          html += '<span style="font-size:11px;color:rgba(255,255,255,0.3);">→ 前往</span>';
+          html += '</div>';
+        }
+        container.innerHTML = html;
+        // 绑定 action 点击事件
+        var taskEls = container.querySelectorAll('[data-task-idx]');
+        for (var ti = 0; ti < taskEls.length; ti++) {
+          (function(el, idx) {
+            el.addEventListener('click', function() {
+              var act = tasks[idx];
+              if (act && act.action) act.action();
+            });
+          })(taskEls[ti], parseInt(taskEls[ti].getAttribute('data-task-idx')));
+        }
+      }
+    } catch (e) {
+      container.innerHTML = '<span style="color:#ef5350; font-size:13px;">检测失败: ' + (e.reason || e.message || '').slice(0, 60) + '</span>';
+    }
+    _pendingTasksLoading = false;
+  }
+
   async function isUserCommitteeMember() {
     try {
       const members = await _A().getCommitteeMembers();
@@ -487,13 +661,29 @@
   }
 
   // --- 使用 Wallet.setCallbacks 处理连接后的页面逻辑 ---
+  var _pendingTasksInterval = null;
+
   Wallet.setCallbacks(
     async function(addr) {
       updateNetworkPill();
       if (typeof loadUserBalance === 'function') loadUserBalance();
+      if (typeof checkPendingTasks === 'function') {
+        checkPendingTasks();
+        if (typeof loadRewardBoard === 'function') loadRewardBoard();
+        if (!_pendingTasksInterval) {
+          _pendingTasksInterval = setInterval(function() {
+            checkPendingTasks();
+            if (typeof loadRewardBoard === 'function') loadRewardBoard();
+          }, 30000);
+        }
+      }
     },
     function() {
       updateNetworkPill();
+      if (_pendingTasksInterval) {
+        clearInterval(_pendingTasksInterval);
+        _pendingTasksInterval = null;
+      }
     }
   );
 
@@ -527,6 +717,8 @@
         // 重新加载所有链上数据
         updateNetworkPill();
         if (loadUserBalance) loadUserBalance();
+        if (typeof checkPendingTasks === 'function') checkPendingTasks();
+        if (typeof loadRewardBoard === 'function') loadRewardBoard();
       } else {
         await switchToChain(chainIdDec);
         applyNetworkConfig(chainIdDec);
@@ -743,8 +935,17 @@
     }
   }
 
+  var _rewardBoardLoading = false;
+
   async function loadRewardBoard() {
+    if (_rewardBoardLoading) return;
+    _rewardBoardLoading = true;
     const el = document.getElementById('rewardBoardList');
+    if (!_U() || !_A()) {
+      el.innerHTML = '<span style="color:rgba(255,255,255,0.4); font-size:13px;">连接钱包后自动加载...</span>';
+      _rewardBoardLoading = false;
+      return;
+    }
     el.innerHTML = '<span class="spinner"></span> 正在查询链上奖励数据...';
     try {
       // 1. 查询委员会成员
@@ -773,6 +974,7 @@
     } catch(e) {
       el.innerHTML = '<span style="color:#ef5350;">加载失败: ' + (e.reason || e.message || '').slice(0,60) + '</span>';
     }
+    _rewardBoardLoading = false;
   }
 
   async function buyCEAT() {
@@ -965,7 +1167,7 @@
     updateVoteAvailability();
   }
 
-  // ============ 争议投票 ============
+  // ============ 分歧投票 ============
 
   async function checkDisputePhase() {
     if (!_A()) return;
@@ -998,7 +1200,7 @@
         infoEl.innerHTML += ' — 已进入委员会裁决阶段，社区投票通道已关闭';
       } else {
         infoEl.className = 'msg';
-        infoEl.innerHTML += ' — 当前不在争议投票阶段';
+        infoEl.innerHTML += ' — 当前不在分歧投票阶段';
       }
     } catch(e) {
       infoEl.className = 'msg error';
@@ -1076,6 +1278,7 @@
         html += '<div style="flex:1; min-width:0;">';
         html += '<div style="font-family:monospace; font-size:11px; color:#60a5fa; word-break:break-all;">' + h + '</div>';
         html += '</div>';
+        html += '<a class="report-view-link" href="javascript:void(0)" onclick="showReportContent(\'' + h + '\')">👁 查看</a>';
         html += '<div style="text-align:right; flex-shrink:0;">';
         html += '<div style="font-size:11px; color:rgba(255,255,255,0.4);">票数</div>';
         html += '<div style="font-size:18px; font-weight:700; color:#4ade80;">' + votes + '</div>';
@@ -1086,6 +1289,78 @@
     } catch (e) {
       container.innerHTML = '<div class="msg error" style="margin:0;"><span style="flex-shrink:0;">&#10060;</span> 查询失败: ' + (e.reason || e.message || String(e)).slice(0, 200) + '</div>';
     }
+  }
+
+  async function showReportContent(hash) {
+    const overlay = document.getElementById('reportModal');
+    const title = document.getElementById('reportModalTitle');
+    const meta = document.getElementById('reportModalMeta');
+    const body = document.getElementById('reportModalBody');
+
+    title.textContent = '方案内容';
+    meta.innerHTML = '<span class="spinner"></span> 正在加载...';
+    body.textContent = '';
+    overlay.classList.add('show');
+
+    try {
+      const url = BACKEND_API + '/reports/by-hash/' + encodeURIComponent(hash);
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        if (resp.status === 404) {
+          meta.innerHTML = '⚠️ 未找到该方案内容';
+          body.textContent = '该哈希对应的方案内容尚未提交到后端，可能是方案仅上链但内容未保存。';
+        } else {
+          meta.innerHTML = '❌ 加载失败 (HTTP ' + resp.status + ')';
+        }
+        return;
+      }
+      const data = await resp.json();
+      title.textContent = '方案内容 - ' + (data.party === 'community' ? '社区' : data.party === 'team' ? '审计团队' : data.party || '未知来源');
+      meta.innerHTML = ''
+        + '<span>来源: <strong>' + (data.party === 'community' ? '社区' : data.party === 'team' ? '审计团队' : data.party || '-') + '</strong></span>'
+        + (data.proposal_id ? '<span>提案ID: <strong>#' + data.proposal_id + '</strong></span>' : '')
+        + (data.submitter_address ? '<span>提交者: <strong style="font-family:monospace;font-size:11px;">' + data.submitter_address.slice(0, 10) + '...' + '</strong></span>' : '')
+        + (data.created_at ? '<span>时间: <strong>' + new Date(data.created_at).toLocaleString() + '</strong></span>' : '');
+
+      // 尝试解析 JSON 内容（社区报告为结构化 JSON）
+      try {
+        const obj = JSON.parse(data.content);
+        const lines = [];
+        if (obj.consensus_proof) {
+          const cp = typeof obj.consensus_proof === 'string' ? JSON.parse(obj.consensus_proof) : obj.consensus_proof;
+          lines.push('═══ 共识投票证明 ═══');
+          lines.push('提案ID: ' + (cp.proposalId || '-'));
+          lines.push('快照区块: ' + (cp.snapshotBlockHeight || '-'));
+          lines.push('');
+        }
+        if (obj.contributors) {
+          const ct = typeof obj.contributors === 'string' ? JSON.parse(obj.contributors) : obj.contributors;
+          lines.push('═══ 贡献者名单 ═══');
+          if (Array.isArray(ct)) ct.forEach(function(c) { lines.push('- ' + (c.name || c.address || c)); });
+          else lines.push(JSON.stringify(ct, null, 2));
+          lines.push('');
+        }
+        if (obj.alignment_statement) {
+          lines.push('═══ 对齐意见书 ═══');
+          lines.push(typeof obj.alignment_statement === 'string' ? obj.alignment_statement : JSON.stringify(obj.alignment_statement, null, 2));
+          lines.push('');
+        }
+        if (obj.signatures) {
+          lines.push('═══ 数字签名 ═══');
+          lines.push(typeof obj.signatures === 'string' ? obj.signatures : JSON.stringify(obj.signatures, null, 2));
+        }
+        body.textContent = lines.join('\n') || JSON.stringify(obj, null, 2);
+      } catch (_) {
+        body.textContent = data.content || '(空内容)';
+      }
+    } catch (e) {
+      meta.innerHTML = '❌ 网络错误';
+      body.textContent = '加载失败: ' + (e.message || String(e));
+    }
+  }
+
+  function closeReportModal() {
+    document.getElementById('reportModal').classList.remove('show');
   }
 
   async function viewVoteCounts() {
@@ -1399,6 +1674,63 @@
 
   function goToCommunityReportWriting(proposalId) {
     window.location.href = 'community-report-writing.html?proposal_id=' + proposalId;
+  }
+
+  async function stakeAsCommittee() {
+    if (!_S()) return alert('请先连接钱包');
+    const val = document.getElementById('committeeStakeAmount').value.trim();
+    if (!val || isNaN(val) || Number(val) <= 0) return alert('请输入有效的质押数量');
+    const amount = ethers.utils.parseEther(val);
+    const el = document.getElementById('committeeStakeResult');
+    el.className = 'msg pending';
+    el.innerHTML = '正在授权并质押委员会席位...';
+
+    try {
+      let sym;
+      try { sym = await _C().symbol(); } catch { sym = 'CEAT'; }
+
+      let currentAllowance;
+      try {
+        currentAllowance = await _C().allowance(_U(), CONFIG.AUDIT_DAO_ADDRESS);
+      } catch (err) {
+        el.className = 'msg error';
+        el.innerHTML = '<span style="flex-shrink:0;">&#10060;</span> 查询授权额度失败';
+        return;
+      }
+
+      if (currentAllowance.lt(amount)) {
+        el.innerHTML = '步骤 1/2: 正在授权 CEAT...';
+        const tx1 = await _C().approve(CONFIG.AUDIT_DAO_ADDRESS, amount, { gasLimit: 300000 });
+        await tx1.wait();
+      }
+
+      el.innerHTML = '步骤 2/2: 正在质押委员会席位...';
+      const tx2 = await _A().stakeAsCommittee(amount, { gasLimit: 500000 });
+      await tx2.wait();
+      el.className = 'msg success';
+      el.innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 委员会席位质押成功！数量: <strong>' + val + '</strong> ' + sym;
+    } catch (e) {
+      showContractError('committeeStakeResult', e);
+    }
+  }
+
+  async function unstakeAsCommittee() {
+    if (!_S()) return alert('请先连接钱包');
+    const val = document.getElementById('committeeStakeAmount').value.trim();
+    if (!val || isNaN(val) || Number(val) <= 0) return alert('请输入有效的解除质押数量');
+    const amount = ethers.utils.parseEther(val);
+    const el = document.getElementById('committeeStakeResult');
+    el.className = 'msg pending';
+    el.innerHTML = '正在解除委员会质押...';
+
+    try {
+      const tx = await _A().unstakeAsCommittee(amount, { gasLimit: 500000 });
+      await tx.wait();
+      el.className = 'msg success';
+      el.innerHTML = '<span style="flex-shrink:0;">&#10004;</span> 委员会质押已解除: <strong>' + val + '</strong> CEAT';
+    } catch (e) {
+      showContractError('committeeStakeResult', e);
+    }
   }
 
   Wallet.registerEvents();
