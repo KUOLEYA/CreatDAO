@@ -936,6 +936,7 @@
   }
 
   var _rewardBoardLoading = false;
+  var _rewardBoardFirstLoad = true;
 
   async function loadRewardBoard() {
     if (_rewardBoardLoading) return;
@@ -946,7 +947,7 @@
       _rewardBoardLoading = false;
       return;
     }
-    el.innerHTML = '<span class="spinner"></span> 正在查询链上奖励数据...';
+    if (_rewardBoardFirstLoad) el.innerHTML = '<span class="spinner"></span> 正在查询链上奖励数据...';
     try {
       // 1. 查询委员会成员
       const members = await _A().getCommitteeMembers();
@@ -970,11 +971,13 @@
           '<span>' + short + ' <span style="font-size:10px;color:rgba(255,255,255,0.3);">[' + roleLabel + ']</span></span>' +
           '<span style="color:#fbbf24;font-weight:700;">' + rewards.toFixed(4) + ' CEAT</span></div>');
       }
-      el.innerHTML = rows.length > 0 ? rows.join('') : '<span style="color:rgba(255,255,255,0.4);">🏆 暂无待领取奖励</span>';
+      const newHtml = rows.length > 0 ? rows.join('') : '<span style="color:rgba(255,255,255,0.4);">🏆 暂无待领取奖励</span>';
+      if (el.innerHTML !== newHtml) el.innerHTML = newHtml;
     } catch(e) {
       el.innerHTML = '<span style="color:#ef5350;">加载失败: ' + (e.reason || e.message || '').slice(0,60) + '</span>';
     }
     _rewardBoardLoading = false;
+    _rewardBoardFirstLoad = false;
   }
 
   async function buyCEAT() {
