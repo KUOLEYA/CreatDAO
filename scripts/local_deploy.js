@@ -44,7 +44,7 @@ async function main() {
   await dao.setCommitteeMembers(committeeMembers);
 
   // 6.5 注册审计团队到 AuditTeamManager
-  await mgr.registerAuditTeam("CreatDAO Core Audit Team", auditTeam.address, [signers[1].address, signers[2].address]);
+  await mgr.registerAuditTeam("CeatDAO Core Audit Team", auditTeam.address, [signers[1].address, signers[2].address]);
   console.log(" Audit Team 注册完成: teamId=0, contract=", auditTeam.address);
 
   // 7. 分发 CEAT（账户 2-10 各 100000，奖励池 100000）
